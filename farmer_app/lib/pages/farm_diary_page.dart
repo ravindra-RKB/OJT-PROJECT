@@ -16,7 +16,9 @@ class _FarmDiaryPageState extends State<FarmDiaryPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       context.read<DiaryProvider>().init().then((_) {
+        if (!mounted) return;
         context.read<DiaryProvider>().loadEntries();
       });
     });
@@ -87,7 +89,7 @@ class _FarmDiaryPageState extends State<FarmDiaryPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -153,7 +155,7 @@ class _FarmDiaryPageState extends State<FarmDiaryPage> {
             const SizedBox(height: 8),
             Chip(
               label: Text(entry.cropType!),
-              backgroundColor: const Color(0xFF617A2E).withOpacity(0.1),
+              backgroundColor: const Color(0xFF617A2E).withValues(alpha: 0.1),
             ),
           ],
           const SizedBox(height: 12),
@@ -253,12 +255,12 @@ class _FarmDiaryPageState extends State<FarmDiaryPage> {
                       firstDate: DateTime(2020),
                       lastDate: DateTime.now(),
                     );
-                    if (date != null) {
+                    if (date != null && context.mounted) {
                       final time = await showTimePicker(
                         context: context,
                         initialTime: TimeOfDay.fromDateTime(selectedDate),
                       );
-                      if (time != null) {
+                      if (time != null && context.mounted) {
                         setState(() {
                           selectedDate = DateTime(
                             date.year,

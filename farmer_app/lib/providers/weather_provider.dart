@@ -1,18 +1,13 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../models/weather_data.dart';
 import '../services/weather_service.dart';
 
 class WeatherProvider with ChangeNotifier {
-  WeatherProvider() {
-    _location = dotenv.env['BANGALORE_DEFAULT_CITY'] ?? _location;
-  }
-
   final WeatherService _weatherService = WeatherService();
   WeatherData? _weatherData;
   bool _loading = false;
   String? _error;
-  String _location = 'Bengaluru'; // Default location
+  String _location = 'Bengaluru'; // Default location - works for all India
 
   WeatherData? get weatherData => _weatherData;
   bool get loading => _loading;
