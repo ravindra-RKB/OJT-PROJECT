@@ -316,10 +316,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             Expanded(
               child: _buildAnimatedActionCard(
                 icon: Icons.shopping_bag,
-                title: 'Market',
-                subtitle: 'Prices',
+                title: 'Marketplace',
+                subtitle: 'Buy & Sell',
                 color: Colors.green,
-                onTap: () => Navigator.pushNamed(context, '/market'),
+                onTap: () => Navigator.pushNamed(context, '/marketplace'),
               ),
             ),
           ],
