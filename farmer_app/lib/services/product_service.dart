@@ -1,5 +1,8 @@
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:uuid/uuid.dart';
@@ -10,12 +13,45 @@ class ProductService {
   final FirebaseStorage _storage = FirebaseStorage.instance;
   final String _collection = 'products';
 
-  Future<String> _uploadImage(File file, String sellerId) async {
-    final id = Uuid().v4();
-    final ref = _storage.ref().child('product_images/$sellerId/$id.jpg');
-    await ref.putFile(file);
-    final url = await ref.getDownloadURL();
-    return url;
+  Future<String> _uploadImage(dynamic file, String sellerId) async {
+    try {
+      final id = Uuid().v4();
+      final ref = _storage.ref().child('product_images/$sellerId/$id.jpg');
+
+      if (kIsWeb) {
+        // On web we must upload bytes
+        Uint8List bytes;
+        if (file is XFile) {
+          bytes = await file.readAsBytes();
+        } else if (file is Uint8List) {
+          bytes = file;
+        } else if (file is File) {
+          bytes = await file.readAsBytes();
+        } else {
+          throw Exception('Unsupported file type for web upload: ${file.runtimeType}');
+        }
+        final uploadTask = ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+        await uploadTask;
+        final url = await ref.getDownloadURL();
+        return url;
+      } else {
+        // Mobile/desktop: accept dart:io File or XFile
+        if (file is XFile) {
+          final f = File(file.path);
+          final uploadTask = ref.putFile(f, SettableMetadata(contentType: 'image/jpeg'));
+          await uploadTask;
+          return await ref.getDownloadURL();
+        } else if (file is File) {
+          final uploadTask = ref.putFile(file, SettableMetadata(contentType: 'image/jpeg'));
+          await uploadTask;
+          return await ref.getDownloadURL();
+        } else {
+          throw Exception('Unsupported file type for upload: ${file.runtimeType}');
+        }
+      }
+    } catch (e) {
+      rethrow;
+    }
   }
 
   Future<Product> createProduct({
@@ -24,7 +60,7 @@ class ProductService {
     required String description,
     required double price,
     required String unit,
-    required List<File> imageFiles,
+    required List<dynamic> imageFiles,
     required double latitude,
     required double longitude,
     required String address,
