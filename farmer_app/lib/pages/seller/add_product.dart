@@ -27,6 +27,9 @@ class _AddProductPageState extends State<AddProductPage> {
   final _categoryCtrl = TextEditingController();
 
   final List<dynamic> _images = [];
+  // track per-image upload progress
+  final List<int> _bytesTransferred = [];
+  final List<int?> _bytesTotal = [];
   bool _loading = false;
   double? _latitude;
   double? _longitude;
@@ -39,22 +42,29 @@ class _AddProductPageState extends State<AddProductPage> {
     // allow multi-select on platforms that support it
     try {
       if (!kIsWeb) {
-        final XFile? picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+        final picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
         if (picked != null) {
           setState(() {
             _images.add(File(picked.path));
+            _bytesTransferred.add(0);
+            _bytesTotal.add(null);
           });
         }
       } else {
         // web: pickMultiImage returns List<XFile>
-        final List<XFile>? pickedList = await picker.pickMultiImage(imageQuality: 80);
-        if (pickedList != null && pickedList.isNotEmpty) {
+        final pickedList = await picker.pickMultiImage(imageQuality: 80);
+        if (pickedList.isNotEmpty) {
           setState(() {
-            for (final xf in pickedList) _images.add(xf);
+            for (final xf in pickedList) {
+              _images.add(xf);
+              _bytesTransferred.add(0);
+              _bytesTotal.add(null);
+            }
           });
         }
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Image pick error: $e')));
     }
   }
@@ -65,6 +75,7 @@ class _AddProductPageState extends State<AddProductPage> {
       return;
     }
     final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.best);
+    if (!mounted) return;
     setState(() {
       _latitude = pos.latitude;
       _longitude = pos.longitude;
@@ -94,12 +105,28 @@ class _AddProductPageState extends State<AddProductPage> {
         address: _address ?? '',
         availableQuantity: int.tryParse(_qtyCtrl.text) ?? 0,
         category: _categoryCtrl.text.trim(),
+        onImageProgress: (index, transferred, total) {
+          if (!mounted) return;
+          setState(() {
+            if (index >= _bytesTransferred.length) {
+              while (_bytesTransferred.length <= index) {
+                _bytesTransferred.add(0);
+              }
+              while (_bytesTotal.length <= index) {
+                _bytesTotal.add(null);
+              }
+            }
+            _bytesTransferred[index] = transferred;
+            _bytesTotal[index] = total;
+          });
+        },
       );
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Product added')));
       Navigator.of(context).pop();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       setState(() => _loading = false);
     }
@@ -138,28 +165,44 @@ class _AddProductPageState extends State<AddProductPage> {
                   itemCount: _images.length,
                   itemBuilder: (context, i) {
                     final img = _images[i];
+                    Widget thumb;
                     if (kIsWeb) {
                       if (img is XFile) {
-                        return FutureBuilder<Uint8List>(
+                        thumb = FutureBuilder<Uint8List>(
                           future: img.readAsBytes(),
                           builder: (context, snap) {
                             if (snap.connectionState != ConnectionState.done) return const SizedBox(width: 100, height: 100, child: Center(child: CircularProgressIndicator()));
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 8.0),
-                              child: Image.memory(snap.data!, width: 100, height: 100, fit: BoxFit.cover),
-                            );
+                            return Image.memory(snap.data!, width: 100, height: 100, fit: BoxFit.cover);
                           },
                         );
+                      } else {
+                        thumb = const SizedBox.shrink();
                       }
-                      // fallback
-                      return const SizedBox.shrink();
                     } else {
-                      // mobile/desktop
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8.0),
-                        child: Image.file(img as File, width: 100, height: 100, fit: BoxFit.cover),
-                      );
+                      thumb = Image.file(img as File, width: 100, height: 100, fit: BoxFit.cover);
                     }
+
+                    final transferred = i < _bytesTransferred.length ? _bytesTransferred[i] : 0;
+                    final total = i < _bytesTotal.length ? _bytesTotal[i] : null;
+
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8.0),
+                      child: Stack(
+                        alignment: Alignment.bottomCenter,
+                        children: [
+                          SizedBox(width: 100, height: 100, child: thumb),
+                          if (_loading)
+                            Positioned(
+                              bottom: 0,
+                              left: 0,
+                              right: 0,
+                              child: total != null && total > 0
+                                  ? LinearProgressIndicator(value: transferred / total)
+                                  : const LinearProgressIndicator(),
+                            ),
+                        ],
+                      ),
+                    );
                   },
                 ),
               ),

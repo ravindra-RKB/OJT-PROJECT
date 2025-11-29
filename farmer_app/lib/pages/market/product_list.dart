@@ -8,6 +8,41 @@ import 'product_detail.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/product_card.dart';
 
+// Small helper to animate each product card when it appears
+class AnimatedProductItem extends StatefulWidget {
+  final Widget child;
+  final int index;
+  const AnimatedProductItem({super.key, required this.child, required this.index});
+
+  @override
+  State<AnimatedProductItem> createState() => _AnimatedProductItemState();
+}
+
+class _AnimatedProductItemState extends State<AnimatedProductItem> with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 420));
+  late final Animation<Offset> _offset = Tween(begin: const Offset(0, 0.06), end: Offset.zero).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
+  late final Animation<double> _opacity = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(Duration(milliseconds: (widget.index * 60).clamp(0, 600)), () {
+      if (mounted) _ctrl.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SlideTransition(position: _offset, child: FadeTransition(opacity: _opacity, child: widget.child));
+  }
+}
+
 class ProductListPage extends StatefulWidget {
   const ProductListPage({super.key});
 
@@ -17,8 +52,6 @@ class ProductListPage extends StatefulWidget {
 
 class _ProductListPageState extends State<ProductListPage> with TickerProviderStateMixin {
   final ProductService _service = ProductService();
-  List<Product> _products = [];
-  bool _loading = true;
   bool _isGrid = false;
   double? _userLat;
   double? _userLng;
@@ -28,7 +61,6 @@ class _ProductListPageState extends State<ProductListPage> with TickerProviderSt
   @override
   void initState() {
     super.initState();
-    _load();
     _fabController = AnimationController(duration: const Duration(milliseconds: 300), vsync: this);
     _fabController.forward();
   }
@@ -37,18 +69,6 @@ class _ProductListPageState extends State<ProductListPage> with TickerProviderSt
   void dispose() {
     _fabController.dispose();
     super.dispose();
-  }
-
-  Future<void> _load({double? userLat, double? userLng, double? maxDistanceKm}) async {
-    setState(() => _loading = true);
-    try {
-      final prods = await _service.fetchProducts(userLat: userLat, userLng: userLng, maxDistanceKm: maxDistanceKm);
-      setState(() => _products = prods);
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-    } finally {
-      setState(() => _loading = false);
-    }
   }
 
   @override
@@ -106,24 +126,23 @@ class _ProductListPageState extends State<ProductListPage> with TickerProviderSt
                     try {
                       bool enabled = await Geolocator.isLocationServiceEnabled();
                       if (!enabled) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enable location services')));
+                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enable location services')));
                         return;
                       }
                       LocationPermission permission = await Geolocator.checkPermission();
                       if (permission == LocationPermission.denied) permission = await Geolocator.requestPermission();
                       if (permission == LocationPermission.deniedForever || permission == LocationPermission.denied) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Location permission denied')));
+                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Location permission denied')));
                         return;
                       }
-                      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.best);
-                      setState(() {
-                        _userLat = pos.latitude;
-                        _userLng = pos.longitude;
-                        _locationFiltered = true;
-                      });
-                      _load(userLat: _userLat, userLng: _userLng, maxDistanceKm: 30);
+                            final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.best);
+                            setState(() {
+                              _userLat = pos.latitude;
+                              _userLng = pos.longitude;
+                              _locationFiltered = true;
+                            });
                     } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Location error: $e')));
+                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Location error: $e')));
                     }
                   },
                   icon: const Icon(Icons.my_location, color: Colors.white),
@@ -153,9 +172,8 @@ class _ProductListPageState extends State<ProductListPage> with TickerProviderSt
                             const Expanded(child: Text('Showing products within 30 km', style: TextStyle(color: Color(0xFF617A2E), fontSize: 12))),
                             GestureDetector(
                               onTap: () => setState(() {
-                                _locationFiltered = false;
-                                _load();
-                              }),
+                                  _locationFiltered = false;
+                                }),
                               child: const Text('Clear', style: TextStyle(color: Color(0xFF617A2E), fontWeight: FontWeight.bold, fontSize: 12)),
                             ),
                           ],
@@ -164,74 +182,98 @@ class _ProductListPageState extends State<ProductListPage> with TickerProviderSt
                     : const SizedBox.shrink(),
               ),
             ),
-            _loading
-                ? SliverFillRemaining(
+            // Real-time products stream
+            StreamBuilder<List<Product>>(
+              stream: _service.streamProducts(
+                  userLat: _locationFiltered ? _userLat : null,
+                  userLng: _locationFiltered ? _userLng : null,
+                  maxDistanceKm: _locationFiltered ? 30 : null),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return SliverFillRemaining(
                     child: Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation(Color(0xFF617A2E))),
-                          const SizedBox(height: 16),
-                          const Text('Loading products...', style: TextStyle(color: Color(0xFF617A2E))),
+                        children: const [
+                          CircularProgressIndicator(valueColor: AlwaysStoppedAnimation(Color(0xFF617A2E))),
+                          SizedBox(height: 16),
+                          Text('Loading products...', style: TextStyle(color: Color(0xFF617A2E))),
                         ],
                       ),
                     ),
-                  )
-                : _products.isEmpty
-                    ? SliverFillRemaining(
-                        child: Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(Icons.shopping_bag_outlined, size: 64, color: Color(0xFFCCCCCC)),
-                              const SizedBox(height: 16),
-                              const Text('No products found', style: TextStyle(color: Color(0xFF999999), fontSize: 16)),
-                              const SizedBox(height: 8),
-                              Text('Try adjusting your filters', style: TextStyle(color: Color(0xFFBBBBBB), fontSize: 12)),
-                            ],
-                          ),
-                        ),
-                      )
-                    : _isGrid
-                        ? SliverPadding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            sliver: SliverGrid(
-                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 2,
-                                childAspectRatio: 0.75,
-                                crossAxisSpacing: 12,
-                                mainAxisSpacing: 12,
-                              ),
-                              delegate: SliverChildBuilderDelegate(
-                                (context, i) {
-                                  final p = _products[i];
-                                  return ProductCard(
-                                    product: p,
-                                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProductDetailPage(product: p))),
-                                  );
-                                },
-                                childCount: _products.length,
-                              ),
+                  );
+                }
+
+                final products = snapshot.data ?? [];
+                if (products.isEmpty) {
+                  return SliverFillRemaining(
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: const [
+                          Icon(Icons.shopping_bag_outlined, size: 64, color: Color(0xFFCCCCCC)),
+                          SizedBox(height: 16),
+                          Text('No products found', style: TextStyle(color: Color(0xFF999999), fontSize: 16)),
+                          SizedBox(height: 8),
+                          Text('Try adjusting your filters', style: TextStyle(color: Color(0xFFBBBBBB), fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
+                if (_isGrid) {
+                  return SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    sliver: SliverGrid(
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        childAspectRatio: 0.75,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                      ),
+                      delegate: SliverChildBuilderDelegate(
+                        (context, i) {
+                          final p = products[i];
+                          return AnimatedProductItem(
+                            key: ValueKey(p.id),
+                            index: i,
+                            child: ProductCard(
+                              product: p,
+                              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProductDetailPage(product: p))),
                             ),
-                          )
-                        : SliverPadding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            sliver: SliverList(
-                              delegate: SliverChildBuilderDelegate(
-                                (context, i) {
-                                  final p = _products[i];
-                                  return Padding(
-                                    padding: const EdgeInsets.only(bottom: 12.0),
-                                    child: ProductCard(
-                                      product: p,
-                                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProductDetailPage(product: p))),
-                                    ),
-                                  );
-                                },
-                                childCount: _products.length,
-                              ),
+                          );
+                        },
+                        childCount: products.length,
+                      ),
+                    ),
+                  );
+                }
+
+                return SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, i) {
+                        final p = products[i];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12.0),
+                          child: AnimatedProductItem(
+                            key: ValueKey(p.id),
+                            index: i,
+                            child: ProductCard(
+                              product: p,
+                              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProductDetailPage(product: p))),
                             ),
                           ),
+                        );
+                      },
+                      childCount: products.length,
+                    ),
+                  ),
+                );
+              },
+            ),
           ],
         ),
       ),
