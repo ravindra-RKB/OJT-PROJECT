@@ -1,7 +1,9 @@
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:image_picker/image_picker.dart';
 
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -24,7 +26,7 @@ class _AddProductPageState extends State<AddProductPage> {
   final _qtyCtrl = TextEditingController();
   final _categoryCtrl = TextEditingController();
 
-  final List<File> _images = [];
+  final List<dynamic> _images = [];
   bool _loading = false;
   double? _latitude;
   double? _longitude;
@@ -34,11 +36,26 @@ class _AddProductPageState extends State<AddProductPage> {
 
   Future<void> _pickImage() async {
     final ImagePicker picker = ImagePicker();
-    final XFile? picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
-    if (picked != null) {
-      setState(() {
-        _images.add(File(picked.path));
-      });
+    // allow multi-select on platforms that support it
+    try {
+      if (!kIsWeb) {
+        final XFile? picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+        if (picked != null) {
+          setState(() {
+            _images.add(File(picked.path));
+          });
+        }
+      } else {
+        // web: pickMultiImage returns List<XFile>
+        final List<XFile>? pickedList = await picker.pickMultiImage(imageQuality: 80);
+        if (pickedList != null && pickedList.isNotEmpty) {
+          setState(() {
+            for (final xf in pickedList) _images.add(xf);
+          });
+        }
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Image pick error: $e')));
     }
   }
 
@@ -119,10 +136,31 @@ class _AddProductPageState extends State<AddProductPage> {
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
                   itemCount: _images.length,
-                  itemBuilder: (context, i) => Padding(
-                    padding: const EdgeInsets.only(right: 8.0),
-                    child: Image.file(_images[i], width: 100, height: 100, fit: BoxFit.cover),
-                  ),
+                  itemBuilder: (context, i) {
+                    final img = _images[i];
+                    if (kIsWeb) {
+                      if (img is XFile) {
+                        return FutureBuilder<Uint8List>(
+                          future: img.readAsBytes(),
+                          builder: (context, snap) {
+                            if (snap.connectionState != ConnectionState.done) return const SizedBox(width: 100, height: 100, child: Center(child: CircularProgressIndicator()));
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 8.0),
+                              child: Image.memory(snap.data!, width: 100, height: 100, fit: BoxFit.cover),
+                            );
+                          },
+                        );
+                      }
+                      // fallback
+                      return const SizedBox.shrink();
+                    } else {
+                      // mobile/desktop
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: Image.file(img as File, width: 100, height: 100, fit: BoxFit.cover),
+                      );
+                    }
+                  },
                 ),
               ),
               const SizedBox(height: 12),
