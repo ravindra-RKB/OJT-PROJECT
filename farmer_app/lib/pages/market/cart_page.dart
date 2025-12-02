@@ -29,10 +29,11 @@ class CartPage extends StatelessWidget {
         'createdAt': FieldValue.serverTimestamp(),
       });
       cart.clear();
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Order placed')));
       Navigator.of(context).pop();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Order error: $e')));
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Order error: $e')));
     }
   }
 

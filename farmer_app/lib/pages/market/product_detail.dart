@@ -317,7 +317,9 @@ class _ProductDetailPageState extends State<ProductDetailPage>
                             onPressed: () {
                               final cart = Provider.of<CartProvider>(context,
                                   listen: false);
-                              for (int i = 0; i < _qty; i++) cart.add(p);
+                              for (int i = 0; i < _qty; i++) {
+                                cart.add(p);
+                              }
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: const Text('Added to cart!'),

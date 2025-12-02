@@ -277,6 +277,8 @@ class MandiService {
         .toList();
   }
 
+  // _mapRecord is intentionally kept for compatibility with older backends.
+  // ignore: unused_element
   MandiPrice? _mapRecord(Map<String, dynamic> record) {
     final commodity = record['commodity'] as String?;
     final market = record['market'] as String?;
