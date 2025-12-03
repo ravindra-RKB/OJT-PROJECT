@@ -6,8 +6,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 // Cloudinary will be used for image hosting instead of Firebase Storage
-import 'package:cloudinary_public/cloudinary_public.dart' show CloudinaryResponse;
 import 'cloudinary_service.dart';
+import 'supabase_service.dart';
 import 'package:uuid/uuid.dart';
 import '../models/product.dart';
 
@@ -156,6 +156,66 @@ class ProductService {
       rethrow;
     }
 
+  }
+
+  /// Create a product in Supabase (Postgres). This is an optional migration
+  /// path. The table `products` should exist with columns matching keys used
+  /// below (sellerId, name, description, price, unit, images (json), latitude,
+  /// longitude, address, availableQuantity, category, created_at).
+  Future<Product> createProductSupabase({
+    required String sellerId,
+    required String name,
+    required String description,
+    required double price,
+    required String unit,
+    required List<dynamic> imageFiles,
+    required double latitude,
+    required double longitude,
+    required String address,
+    required int availableQuantity,
+    required String category,
+    void Function(int index, int bytesTransferred, int? totalBytes)? onImageProgress,
+  }) async {
+    final List<String> imageUrls = [];
+
+    // Upload images to Cloudinary first
+    if (imageFiles.isNotEmpty) {
+      for (int idx = 0; idx < imageFiles.length; idx++) {
+        final file = imageFiles[idx];
+        try {
+          final url = await _uploadImage(file, sellerId, index: idx, onProgress: onImageProgress);
+          imageUrls.add(url);
+        } catch (e) {
+          print('ProductService: Failed to upload image #$idx to Cloudinary: $e');
+        }
+      }
+    }
+
+    final sb = SupabaseService().client;
+    try {
+      final resp = await sb.from('products').insert({
+        'sellerId': sellerId,
+        'name': name,
+        'description': description,
+        'price': price,
+        'unit': unit,
+        'images': imageUrls,
+        'latitude': latitude,
+        'longitude': longitude,
+        'address': address,
+        'availableQuantity': availableQuantity,
+        'category': category,
+      }).select().maybeSingle();
+
+      // The response may be a map representing the created row
+      final data = resp as dynamic;
+      if (data == null) throw Exception('Supabase insert returned null');
+      final id = (data['id'] ?? '').toString();
+      return Product.fromMap(Map<String, dynamic>.from(data), id);
+    } catch (e) {
+      print('ProductService: Error creating product in Supabase: $e');
+      rethrow;
+    }
   }
 
   double _distanceInKm(double lat1, double lon1, double lat2, double lon2) {

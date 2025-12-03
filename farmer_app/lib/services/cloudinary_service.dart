@@ -1,6 +1,7 @@
 import 'dart:typed_data';
-
-import 'package:cloudinary_public/cloudinary_public.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:cloudinary_public/cloudinary_public.dart' show CloudinaryPublic, CloudinaryFile;
 
 /// Simple Cloudinary wrapper. Requires you to configure the
 /// `CLOUDINARY_CLOUD_NAME` and `CLOUDINARY_UPLOAD_PRESET` in your
@@ -12,28 +13,42 @@ class CloudinaryService {
 
   final CloudinaryPublic _client = CloudinaryPublic(cloudName, uploadPreset, cache: false);
 
-  /// Uploads a file to Cloudinary. `filePathOrBytes` may be a local file path
-  /// or bytes (for web). The returned string is the secure URL.
+  /// Uploads a file to Cloudinary. `file` may be a local file path or bytes
+  /// (for web). Returns the secure URL on success.
   Future<String> uploadImage({required dynamic file, required String folder, String? fileName}) async {
     try {
-      CloudinaryResponse res;
+      // If bytes (web), do a multipart upload directly to Cloudinary unsigned endpoint
       if (file is Uint8List) {
         final name = fileName ?? '${DateTime.now().millisecondsSinceEpoch}.jpg';
-        res = await _client.uploadFile(CloudinaryFile.fromBytes(file, folder: folder, fileName: name));
-      } else if (file is String) {
-        // treat as file path
-        res = await _client.uploadFile(CloudinaryFile.fromFile(file, folder: folder));
-      } else {
-        // XFile or File types should provide a path
-        try {
-          final path = (file.path ?? '') as String;
-          res = await _client.uploadFile(CloudinaryFile.fromFile(path, folder: folder));
-        } catch (e) {
-          // fallback to converting to bytes isn't implemented here
-          rethrow;
+        final uri = Uri.parse('https://api.cloudinary.com/v1_1/$cloudName/image/upload');
+        final request = http.MultipartRequest('POST', uri);
+        request.fields['upload_preset'] = uploadPreset;
+        if (folder.isNotEmpty) request.fields['folder'] = folder;
+        request.files.add(http.MultipartFile.fromBytes('file', file, filename: name));
+        final streamed = await request.send();
+        final resp = await http.Response.fromStream(streamed);
+        if (resp.statusCode >= 200 && resp.statusCode < 300) {
+          final decoded = json.decode(resp.body) as Map<String, dynamic>;
+          return decoded['secure_url'] as String;
+        } else {
+          throw Exception('Cloudinary upload failed: ${resp.statusCode} ${resp.body}');
         }
       }
-      return res.secureUrl;
+
+      // For file paths (mobile/desktop), delegate to cloudinary_public client
+      if (file is String) {
+        final res = await _client.uploadFile(CloudinaryFile.fromFile(file, folder: folder));
+        return res.secureUrl;
+      }
+
+      // For XFile or File objects with a path, try to extract path
+      try {
+        final path = file.path as String;
+        final res = await _client.uploadFile(CloudinaryFile.fromFile(path, folder: folder));
+        return res.secureUrl;
+      } catch (e) {
+        throw Exception('Unsupported file type for Cloudinary upload: ${file.runtimeType}');
+      }
     } catch (e) {
       rethrow;
     }

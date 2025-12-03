@@ -66,4 +66,41 @@ class Product {
       createdAt: data['createdAt'] ?? Timestamp.now(),
     );
   }
+
+  /// Construct from a plain map (e.g., returned by Supabase). Expects
+  /// timestamps under `created_at` (ISO string) or `createdAt`.
+  factory Product.fromMap(Map<String, dynamic> map, String id) {
+    dynamic created = map['created_at'] ?? map['createdAt'];
+    Timestamp ts;
+    try {
+      if (created == null) {
+        ts = Timestamp.now();
+      } else if (created is String) {
+        ts = Timestamp.fromDate(DateTime.parse(created));
+      } else if (created is DateTime) {
+        ts = Timestamp.fromDate(created);
+      } else {
+        // Fallback
+        ts = Timestamp.now();
+      }
+    } catch (_) {
+      ts = Timestamp.now();
+    }
+
+    return Product(
+      id: id,
+      sellerId: map['sellerId'] ?? map['seller_id'] ?? '',
+      name: map['name'] ?? '',
+      description: map['description'] ?? '',
+      price: (map['price'] ?? 0).toDouble(),
+      unit: map['unit'] ?? '',
+      images: List<String>.from(map['images'] ?? []),
+      latitude: (map['latitude'] ?? 0).toDouble(),
+      longitude: (map['longitude'] ?? 0).toDouble(),
+      address: map['address'] ?? '',
+      availableQuantity: (map['availableQuantity'] ?? map['available_quantity'] ?? 0).toInt(),
+      category: map['category'] ?? '',
+      createdAt: ts,
+    );
+  }
 }
