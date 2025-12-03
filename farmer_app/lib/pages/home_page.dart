@@ -467,6 +467,22 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             const SizedBox(width: 16),
             Expanded(
               child: _buildAnimatedActionCard(
+                icon: Icons.biotech,
+                title: 'Disease',
+                subtitle: 'Detection',
+                color: Colors.red,
+                onTap: () =>
+                    Navigator.pushNamed(context, '/disease-detection'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            const Spacer(),
+            Expanded(
+              child: _buildAnimatedActionCard(
                 icon: Icons.assignment,
                 title: 'Govt',
                 subtitle: 'Schemes',

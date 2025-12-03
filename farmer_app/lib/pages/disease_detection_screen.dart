@@ -1,8 +1,16 @@
+<<<<<<< HEAD
 // lib/pages/disease_detection_screen.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
+=======
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+
+>>>>>>> cd7762c3a1b097ed2e49c44afa1e1949ebaa2a28
 import '../services/disease_detection_service.dart';
 import '../services/pesticide_service.dart';
 
@@ -90,6 +98,7 @@ class _DiseaseDetectionScreenState extends State<DiseaseDetectionScreen> {
 
     try {
       final result = await _diseaseService.detectDisease(_selectedImage!);
+<<<<<<< HEAD
       
       if (result != null) {
         final diseaseName = result['disease'];
@@ -97,6 +106,16 @@ class _DiseaseDetectionScreenState extends State<DiseaseDetectionScreen> {
         
         final pesticideInfo = await _pesticideService.getPesticideInfo(diseaseName);
         
+=======
+
+      if (result != null) {
+        final diseaseName = result['disease'];
+        final confidence = result['confidence'];
+
+        final pesticideInfo =
+            await _pesticideService.getPesticideInfo(diseaseName);
+
+>>>>>>> cd7762c3a1b097ed2e49c44afa1e1949ebaa2a28
         setState(() {
           _diseaseName = diseaseName;
           _confidence = confidence;
@@ -105,7 +124,13 @@ class _DiseaseDetectionScreenState extends State<DiseaseDetectionScreen> {
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
+<<<<<<< HEAD
             const SnackBar(content: Text('Could not detect disease. Please try another image.')),
+=======
+            const SnackBar(
+                content: Text(
+                    'Could not detect disease. Please try another image.')),
+>>>>>>> cd7762c3a1b097ed2e49c44afa1e1949ebaa2a28
           );
         }
       }
@@ -170,7 +195,11 @@ class _DiseaseDetectionScreenState extends State<DiseaseDetectionScreen> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
+<<<<<<< HEAD
               const Color(0xFF617A2E).withValues(alpha: 0.1),
+=======
+              const Color(0xFF617A2E).withOpacity(0.1),
+>>>>>>> cd7762c3a1b097ed2e49c44afa1e1949ebaa2a28
               const Color(0xFFF3EFE7),
             ],
           ),
@@ -188,7 +217,11 @@ class _DiseaseDetectionScreenState extends State<DiseaseDetectionScreen> {
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: [
                     BoxShadow(
+<<<<<<< HEAD
                       color: Colors.grey.withValues(alpha: 0.2),
+=======
+                      color: Colors.grey.withOpacity(0.2),
+>>>>>>> cd7762c3a1b097ed2e49c44afa1e1949ebaa2a28
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -243,16 +276,28 @@ class _DiseaseDetectionScreenState extends State<DiseaseDetectionScreen> {
 
               // Detect Disease Button
               ElevatedButton.icon(
+<<<<<<< HEAD
                 onPressed: (_isLoading || _isModelLoading || _selectedImage == null)
                     ? null
                     : _detectDisease,
+=======
+                onPressed:
+                    (_isLoading || _isModelLoading || _selectedImage == null)
+                        ? null
+                        : _detectDisease,
+>>>>>>> cd7762c3a1b097ed2e49c44afa1e1949ebaa2a28
                 icon: _isLoading
                     ? const SizedBox(
                         width: 20,
                         height: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
+<<<<<<< HEAD
                           valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+=======
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
+>>>>>>> cd7762c3a1b097ed2e49c44afa1e1949ebaa2a28
                         ),
                       )
                     : const Icon(Icons.search),
@@ -277,7 +322,11 @@ class _DiseaseDetectionScreenState extends State<DiseaseDetectionScreen> {
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
+<<<<<<< HEAD
                         color: Colors.grey.withValues(alpha: 0.2),
+=======
+                        color: Colors.grey.withOpacity(0.2),
+>>>>>>> cd7762c3a1b097ed2e49c44afa1e1949ebaa2a28
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
@@ -350,7 +399,10 @@ class _DiseaseDetectionScreenState extends State<DiseaseDetectionScreen> {
                           _pesticideInfo!['organic'],
                           Colors.green,
                           Icons.eco,
+<<<<<<< HEAD
                           searchTerm: _pesticideInfo!['organicSearch'] ?? _pesticideInfo!['organic'],
+=======
+>>>>>>> cd7762c3a1b097ed2e49c44afa1e1949ebaa2a28
                         ),
                       const SizedBox(height: 12),
 
@@ -361,7 +413,10 @@ class _DiseaseDetectionScreenState extends State<DiseaseDetectionScreen> {
                           _pesticideInfo!['chemical'],
                           Colors.orange,
                           Icons.science,
+<<<<<<< HEAD
                           searchTerm: _pesticideInfo!['chemicalSearch'] ?? _pesticideInfo!['chemical'],
+=======
+>>>>>>> cd7762c3a1b097ed2e49c44afa1e1949ebaa2a28
                         ),
                       const SizedBox(height: 20),
 
@@ -377,7 +432,12 @@ class _DiseaseDetectionScreenState extends State<DiseaseDetectionScreen> {
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+<<<<<<< HEAD
                               Icon(Icons.medication_liquid, color: Colors.amber[800]),
+=======
+                              Icon(Icons.medication_liquid,
+                                  color: Colors.amber[800]),
+>>>>>>> cd7762c3a1b097ed2e49c44afa1e1949ebaa2a28
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
@@ -415,7 +475,12 @@ class _DiseaseDetectionScreenState extends State<DiseaseDetectionScreen> {
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+<<<<<<< HEAD
                               Icon(Icons.warning_amber_rounded, color: Colors.red[800]),
+=======
+                              Icon(Icons.warning_amber_rounded,
+                                  color: Colors.red[800]),
+>>>>>>> cd7762c3a1b097ed2e49c44afa1e1949ebaa2a28
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
@@ -462,6 +527,7 @@ class _DiseaseDetectionScreenState extends State<DiseaseDetectionScreen> {
     String type,
     String name,
     MaterialColor color,
+<<<<<<< HEAD
     IconData icon, {
     required String searchTerm,
   }) {
@@ -540,11 +606,49 @@ class _DiseaseDetectionScreenState extends State<DiseaseDetectionScreen> {
                 ),
               ),
             ],
+=======
+    IconData icon,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color.shade700),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  type,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: color.shade700,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  name,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+>>>>>>> cd7762c3a1b097ed2e49c44afa1e1949ebaa2a28
           ),
         ],
       ),
     );
   }
+<<<<<<< HEAD
 
   Widget _buildBuyButton({
     required String label,
@@ -620,3 +724,8 @@ class _DiseaseDetectionScreenState extends State<DiseaseDetectionScreen> {
   }
 }
 
+=======
+}
+
+
+>>>>>>> cd7762c3a1b097ed2e49c44afa1e1949ebaa2a28

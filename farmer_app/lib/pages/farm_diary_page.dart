@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../providers/diary_provider.dart';
 import '../models/farm_diary_entry.dart';
+import '../services/field_condition_service.dart';
 
 class FarmDiaryPage extends StatefulWidget {
   const FarmDiaryPage({super.key});
@@ -12,6 +13,12 @@ class FarmDiaryPage extends StatefulWidget {
 }
 
 class _FarmDiaryPageState extends State<FarmDiaryPage> {
+  String _searchQuery = '';
+  final FieldConditionService _conditionService = FieldConditionService();
+  bool _conditionsLoading = false;
+  String? _conditionsError;
+  FieldConditionData? _fieldCondition;
+
   @override
   void initState() {
     super.initState();
@@ -21,7 +28,32 @@ class _FarmDiaryPageState extends State<FarmDiaryPage> {
         if (!mounted) return;
         context.read<DiaryProvider>().loadEntries();
       });
+      _loadFieldConditions();
     });
+  }
+
+  Future<void> _loadFieldConditions() async {
+    setState(() {
+      _conditionsLoading = true;
+      _conditionsError = null;
+    });
+    try {
+      final data = await _conditionService.fetchConditions();
+      if (!mounted) return;
+      setState(() {
+        _fieldCondition = data;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _conditionsError = 'Could not fetch field conditions. Please try again.';
+      });
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _conditionsLoading = false;
+      });
+    }
   }
 
   @override
@@ -44,37 +76,234 @@ class _FarmDiaryPageState extends State<FarmDiaryPage> {
           if (diaryProvider.loading) {
             return const Center(child: CircularProgressIndicator());
           }
+          final filteredEntries = diaryProvider.entries.where((entry) {
+            if (_searchQuery.isEmpty) return true;
+            final q = _searchQuery.toLowerCase();
+            return entry.title.toLowerCase().contains(q) ||
+                entry.description.toLowerCase().contains(q) ||
+                (entry.cropType != null &&
+                    entry.cropType!.toLowerCase().contains(q)) ||
+                (entry.fieldLocation != null &&
+                    entry.fieldLocation!.toLowerCase().contains(q));
+          }).toList();
 
-          if (diaryProvider.entries.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.book_outlined, size: 64, color: Colors.grey),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'No diary entries yet',
-                    style: TextStyle(fontSize: 18, color: Colors.grey),
+          return Column(
+            children: [
+              _buildFieldConditionSection(),
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: TextField(
+                  decoration: InputDecoration(
+                    hintText: 'Search by title, crop, or location',
+                    prefixIcon: const Icon(Icons.search),
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 0),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: BorderSide.none,
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Tap + to add your first entry',
-                    style: TextStyle(fontSize: 14, color: Colors.grey),
-                  ),
-                ],
+                  onChanged: (value) {
+                    setState(() {
+                      _searchQuery = value;
+                    });
+                  },
+                ),
               ),
-            );
-          }
-
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: diaryProvider.entries.length,
-            itemBuilder: (context, index) {
-              final entry = diaryProvider.entries[index];
-              return _buildDiaryCard(context, entry, diaryProvider);
-            },
+              const SizedBox(height: 4),
+              Expanded(
+                child: filteredEntries.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.book_outlined,
+                                size: 64, color: Colors.grey),
+                            const SizedBox(height: 16),
+                            Text(
+                              diaryProvider.entries.isEmpty
+                                  ? 'No diary entries yet'
+                                  : 'No entries match your search',
+                              style: const TextStyle(
+                                  fontSize: 18, color: Colors.grey),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              diaryProvider.entries.isEmpty
+                                  ? 'Tap + to add your first entry'
+                                  : 'Try changing your search keywords',
+                              style: const TextStyle(
+                                  fontSize: 14, color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: filteredEntries.length,
+                        itemBuilder: (context, index) {
+                          final entry = filteredEntries[index];
+                          return _buildDiaryCard(
+                              context, entry, diaryProvider);
+                        },
+                      ),
+              ),
+            ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildFieldConditionSection() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: _conditionsLoading
+            ? Row(
+                children: const [
+                  CircularProgressIndicator(strokeWidth: 2),
+                  SizedBox(width: 12),
+                  Text('Loading field conditions...'),
+                ],
+              )
+            : _conditionsError != null
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Field Insights',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _conditionsError!,
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                      TextButton.icon(
+                        onPressed: _loadFieldConditions,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Retry'),
+                      ),
+                    ],
+                  )
+                : _fieldCondition == null
+                    ? const Text('No field data available yet.')
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Field Insights',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            children: [
+                              _buildConditionChip(
+                                icon: Icons.thermostat,
+                                label:
+                                    '${_fieldCondition!.temperature.toStringAsFixed(1)}°C',
+                                description: 'Air Temperature',
+                                color: Colors.orange,
+                              ),
+                              _buildConditionChip(
+                                icon: Icons.water_drop,
+                                label:
+                                    '${_fieldCondition!.humidity.toStringAsFixed(0)}%',
+                                description: 'Humidity',
+                                color: Colors.blue,
+                              ),
+                              _buildConditionChip(
+                                icon: Icons.ac_unit,
+                                label:
+                                    '${_fieldCondition!.apparentTemperature.toStringAsFixed(1)}°C',
+                                description: 'Feels Like',
+                                color: Colors.teal,
+                              ),
+                              _buildConditionChip(
+                                icon: Icons.grain,
+                                label:
+                                    '${_fieldCondition!.precipitation.toStringAsFixed(1)} mm',
+                                description: 'Precipitation',
+                                color: Colors.green,
+                              ),
+                            ],
+                          ),
+                          if (_fieldCondition != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                'Updated ${DateFormat('hh:mm a').format(_fieldCondition!.fetchedAt)}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+      ),
+    );
+  }
+
+  Widget _buildConditionChip({
+    required IconData icon,
+    required String label,
+    required String description,
+    required Color color,
+  }) {
+    return Container(
+      width: 150,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            description,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[700],
+            ),
+          ),
+        ],
       ),
     );
   }

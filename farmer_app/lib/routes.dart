@@ -9,6 +9,7 @@ import 'pages/market_prices_page.dart';
 import 'pages/farm_diary_page.dart';
 import 'pages/schemes_page.dart';
 import 'pages/profile_page.dart';
+import 'pages/disease_detection_screen.dart';
 import 'pages/market/product_list.dart';
 import 'pages/market/checkout_page.dart';
 import 'pages/market/order_tracking_page.dart';
