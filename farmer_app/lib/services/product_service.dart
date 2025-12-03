@@ -363,4 +363,124 @@ class ProductService {
       rethrow;
     }
   }
+
+  /* ==================== Supabase Variants (Read/Update/Delete) ==================== */
+
+  /// Get a single product by ID from Supabase
+  Future<Product?> getProductByIdSupabase(String productId) async {
+    try {
+      final sb = SupabaseService().client;
+      final resp = await sb.from('products').select().eq('id', productId).maybeSingle();
+      final row = resp as dynamic;
+      if (row == null) return null;
+      return Product.fromMap(Map<String, dynamic>.from(row), row['id'].toString());
+    } catch (e) {
+      print('ProductService: Error fetching product from Supabase: $e');
+      rethrow;
+    }
+  }
+
+  /// Get all products from Supabase with optional filtering
+  Future<List<Product>> getProductsSupabase({
+    double? userLat,
+    double? userLng,
+    double? maxDistanceKm,
+    String? category,
+  }) async {
+    try {
+      final sb = SupabaseService().client;
+      final query = sb.from('products').select().order('created_at', ascending: false);
+      final resp = await query;
+      final rows = resp as List<dynamic>;
+
+      var products = rows.map((r) => Product.fromMap(Map<String, dynamic>.from(r), r['id'].toString())).toList();
+
+      // Client-side distance filter
+      if (userLat != null && userLng != null && maxDistanceKm != null) {
+        products = products.where((p) {
+          final distance = _distanceInKm(userLat, userLng, p.latitude, p.longitude);
+          return distance <= maxDistanceKm;
+        }).toList();
+      }
+
+      // Client-side category filter
+      if (category != null && category.isNotEmpty) {
+        products = products.where((p) => p.category == category).toList();
+      }
+
+      return products;
+    } catch (e) {
+      print('ProductService: Error fetching products from Supabase: $e');
+      rethrow;
+    }
+  }
+
+  /// Get seller's products from Supabase
+  Future<List<Product>> getSellerProductsSupabase(String sellerId) async {
+    try {
+      final sb = SupabaseService().client;
+      final resp = await sb.from('products').select().eq('sellerId', sellerId).order('created_at', ascending: false);
+      final rows = resp as List<dynamic>;
+      return rows.map((r) => Product.fromMap(Map<String, dynamic>.from(r), r['id'].toString())).toList();
+    } catch (e) {
+      print('ProductService: Error fetching seller products from Supabase: $e');
+      rethrow;
+    }
+  }
+
+  /// Update a product in Supabase (image replacement not yet supported)
+  Future<Product> updateProductSupabase({
+    required String productId,
+    String? name,
+    String? description,
+    double? price,
+    String? unit,
+    double? latitude,
+    double? longitude,
+    String? address,
+    int? availableQuantity,
+    String? category,
+  }) async {
+    try {
+      final sb = SupabaseService().client;
+      final updateData = <String, dynamic>{};
+
+      if (name != null) updateData['name'] = name;
+      if (description != null) updateData['description'] = description;
+      if (price != null) updateData['price'] = price;
+      if (unit != null) updateData['unit'] = unit;
+      if (latitude != null) updateData['latitude'] = latitude;
+      if (longitude != null) updateData['longitude'] = longitude;
+      if (address != null) updateData['address'] = address;
+      if (availableQuantity != null) updateData['availableQuantity'] = availableQuantity;
+      if (category != null) updateData['category'] = category;
+
+      if (updateData.isEmpty) {
+        // No updates; just fetch and return current product
+        return (await getProductByIdSupabase(productId)) ??
+            (throw Exception('Product $productId not found'));
+      }
+
+      updateData['updated_at'] = DateTime.now().toIso8601String();
+      await sb.from('products').update(updateData).eq('id', productId);
+
+      final updated = await getProductByIdSupabase(productId);
+      return updated ?? (throw Exception('Product $productId not found after update'));
+    } catch (e) {
+      print('ProductService: Error updating product in Supabase: $e');
+      rethrow;
+    }
+  }
+
+  /// Delete a product from Supabase
+  Future<void> deleteProductSupabase(String productId) async {
+    try {
+      final sb = SupabaseService().client;
+      await sb.from('products').delete().eq('id', productId);
+      print('ProductService: Deleted product $productId from Supabase');
+    } catch (e) {
+      print('ProductService: Error deleting product from Supabase: $e');
+      rethrow;
+    }
+  }
 }
