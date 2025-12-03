@@ -215,115 +215,130 @@ class _AddProductPageState extends State<AddProductPage> with TickerProviderStat
   }
 
   void _showSuccessDialog(Product product, {required bool isEdit}) {
+    bool _autoRedirectScheduled = false;
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          isEdit ? 'Product Updated' : '✓ Product added successfully!',
-          style: const TextStyle(color: Color(0xFF617A2E), fontWeight: FontWeight.bold, fontSize: 18),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(isEdit ? Icons.edit_note : Icons.check_circle, color: const Color(0xFF8BC34A), size: 60),
-            const SizedBox(height: 16),
-            Text(
-              isEdit 
-                ? 'Product details have been updated successfully.' 
-                : 'Your product "${product.name}" has been added to the marketplace!',
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 14),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF617A2E).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
+      builder: (ctx) {
+        // schedule auto-redirect once for non-edit adds
+        if (!isEdit && !_autoRedirectScheduled) {
+          _autoRedirectScheduled = true;
+          Future.delayed(const Duration(seconds: 2), () {
+            if (!mounted) return;
+            try {
+              Navigator.of(ctx).pop();
+            } catch (_) {}
+            Navigator.of(context).pushNamedAndRemoveUntil('/marketplace', (route) => route.isFirst);
+          });
+        }
+
+        return AlertDialog(
+          title: Text(
+            isEdit ? 'Product Updated' : '✓ Product added successfully!',
+            style: const TextStyle(color: Color(0xFF617A2E), fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(isEdit ? Icons.edit_note : Icons.check_circle, color: const Color(0xFF8BC34A), size: 60),
+              const SizedBox(height: 16),
+              Text(
+                isEdit
+                    ? 'Product details have been updated successfully.'
+                    : 'Your product "${product.name}" has been added to the marketplace!',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 14),
               ),
-              child: Row(
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF617A2E).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.shopping_bag, color: Color(0xFF617A2E)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        product.name,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF617A2E)),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.shopping_bag, color: Color(0xFF617A2E)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      product.name,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF617A2E)),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                  Tooltip(
+                    message: 'Edit this product',
+                    child: IconButton(
+                      onPressed: () {
+                        Navigator.of(ctx).pop();
+                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => AddProductPage(product: product)));
+                      },
+                      icon: const Icon(Icons.edit, color: Color(0xFF617A2E)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Tooltip(
+                    message: 'Remove product',
+                    child: IconButton(
+                      onPressed: () async {
+                        Navigator.of(ctx).pop();
+                        try {
+                          await _service.deleteProduct(product.id);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context)
+                                .showSnackBar(const SnackBar(content: Text('Product removed.')));
+                            Navigator.of(context).maybePop();
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context)
+                                .showSnackBar(SnackBar(content: Text('Failed to remove: $e')));
+                          }
+                        }
+                      },
+                      icon: const Icon(Icons.delete, color: Colors.redAccent),
                     ),
                   ),
                 ],
               ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                if (!isEdit) {
+                  // After adding, navigate to marketplace page
+                  Navigator.of(context).pushNamedAndRemoveUntil('/marketplace', (route) => route.isFirst);
+                } else {
+                  Navigator.of(context).pop();
+                }
+              },
+              child: Text(isEdit ? 'Close' : 'Go to Marketplace',
+                  style: const TextStyle(color: Color(0xFF617A2E), fontWeight: FontWeight.bold)),
             ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Tooltip(
-                  message: 'Edit this product',
-                  child: IconButton(
-                    onPressed: () {
-                      Navigator.of(ctx).pop();
-                      Navigator.of(context).push(MaterialPageRoute(builder: (_) => AddProductPage(product: product)));
-                    },
-                    icon: const Icon(Icons.edit, color: Color(0xFF617A2E)),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Tooltip(
-                  message: 'Remove product',
-                  child: IconButton(
-                    onPressed: () async {
-                      Navigator.of(ctx).pop();
-                      try {
-                        await _service.deleteProduct(product.id);
-                        if (mounted) {
-                          ScaffoldMessenger.of(context)
-                              .showSnackBar(const SnackBar(content: Text('Product removed.')));
-                          Navigator.of(context).maybePop();
-                        }
-                      } catch (e) {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context)
-                              .showSnackBar(SnackBar(content: Text('Failed to remove: $e')));
-                        }
-                      }
-                    },
-                    icon: const Icon(Icons.delete, color: Colors.redAccent),
-                  ),
-                ),
-              ],
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF8BC34A)),
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                Navigator.of(context).pop();
+              },
+              child: Text(isEdit ? 'Back' : 'Add Another Product',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              if (!isEdit) {
-                // After adding, navigate to marketplace page
-                Navigator.of(context).pushNamedAndRemoveUntil('/marketplace', (route) => route.isFirst);
-              } else {
-                Navigator.of(context).pop();
-              }
-            },
-            child: Text(isEdit ? 'Close' : 'Go to Marketplace',
-                style: const TextStyle(color: Color(0xFF617A2E), fontWeight: FontWeight.bold)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF8BC34A)),
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              Navigator.of(context).pop();
-            },
-            child: Text(isEdit ? 'Back' : 'Add Another Product',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
