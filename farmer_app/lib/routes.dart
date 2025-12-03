@@ -9,6 +9,7 @@ import 'pages/market_prices_page.dart';
 import 'pages/farm_diary_page.dart';
 import 'pages/schemes_page.dart';
 import 'pages/profile_page.dart';
+import 'pages/disease_detection_screen.dart';
 import 'pages/market/product_list.dart';
 import 'pages/seller/add_product.dart';
 import 'pages/market/cart_page.dart';
@@ -26,4 +27,5 @@ final Map<String, WidgetBuilder> appRoutes = {
   '/diary': (context) => const FarmDiaryPage(),
   '/schemes': (context) => const SchemesPage(),
   '/profile': (context) => const ProfilePage(),
+  '/disease-detection': (context) => const DiseaseDetectionScreen(),
 };
