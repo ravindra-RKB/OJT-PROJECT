@@ -220,8 +220,8 @@ class _AddProductPageState extends State<AddProductPage> with TickerProviderStat
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         title: Text(
-          isEdit ? 'Product Updated' : '✓ Success!',
-          style: const TextStyle(color: Color(0xFF617A2E), fontWeight: FontWeight.bold),
+          isEdit ? 'Product Updated' : '✓ Product added successfully!',
+          style: const TextStyle(color: Color(0xFF617A2E), fontWeight: FontWeight.bold, fontSize: 18),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -229,8 +229,11 @@ class _AddProductPageState extends State<AddProductPage> with TickerProviderStat
             Icon(isEdit ? Icons.edit_note : Icons.check_circle, color: const Color(0xFF8BC34A), size: 60),
             const SizedBox(height: 16),
             Text(
-              isEdit ? 'Product details refreshed successfully.' : 'Your product has been added successfully!',
+              isEdit 
+                ? 'Product details have been updated successfully.' 
+                : 'Your product "${product.name}" has been added to the marketplace!',
               textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 14),
             ),
             const SizedBox(height: 12),
             Container(
@@ -298,8 +301,16 @@ class _AddProductPageState extends State<AddProductPage> with TickerProviderStat
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(isEdit ? 'Close' : 'Continue Selling',
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              if (!isEdit) {
+                // After adding, navigate to marketplace page
+                Navigator.of(context).pushNamedAndRemoveUntil('/marketplace', (route) => route.isFirst);
+              } else {
+                Navigator.of(context).pop();
+              }
+            },
+            child: Text(isEdit ? 'Close' : 'Go to Marketplace',
                 style: const TextStyle(color: Color(0xFF617A2E), fontWeight: FontWeight.bold)),
           ),
           ElevatedButton(
@@ -308,7 +319,7 @@ class _AddProductPageState extends State<AddProductPage> with TickerProviderStat
               Navigator.of(ctx).pop();
               Navigator.of(context).pop();
             },
-            child: Text(isEdit ? 'Back' : 'Back to Marketplace',
+            child: Text(isEdit ? 'Back' : 'Add Another Product',
                 style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
