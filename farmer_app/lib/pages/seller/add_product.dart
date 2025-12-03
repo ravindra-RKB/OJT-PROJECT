@@ -9,15 +9,18 @@ import 'package:geolocator/geolocator.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../services/product_service.dart';
+import '../../models/product.dart';
 
 class AddProductPage extends StatefulWidget {
-  const AddProductPage({super.key});
+  final Product? product;
+  const AddProductPage({super.key, this.product});
 
   @override
   State<AddProductPage> createState() => _AddProductPageState();
 }
 
 class _AddProductPageState extends State<AddProductPage> with TickerProviderStateMixin {
+  bool get _isEditing => widget.product != null;
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
@@ -27,6 +30,7 @@ class _AddProductPageState extends State<AddProductPage> with TickerProviderStat
   final _categoryCtrl = TextEditingController();
 
   final List<dynamic> _images = [];
+  List<String> _existingImages = [];
   // track per-image upload progress
   final List<int> _bytesTransferred = [];
   final List<int?> _bytesTotal = [];
@@ -44,6 +48,19 @@ class _AddProductPageState extends State<AddProductPage> with TickerProviderStat
     super.initState();
     _fadeController = AnimationController(duration: const Duration(milliseconds: 600), vsync: this);
     _fadeController.forward();
+    if (_isEditing) {
+      final product = widget.product!;
+      _nameCtrl.text = product.name;
+      _descCtrl.text = product.description;
+      _priceCtrl.text = product.price.toStringAsFixed(2);
+      _unitCtrl.text = product.unit;
+      _qtyCtrl.text = product.availableQuantity.toString();
+      _categoryCtrl.text = product.category;
+      _latitude = product.latitude;
+      _longitude = product.longitude;
+      _address = product.address;
+      _existingImages = List<String>.from(product.images);
+    }
   }
 
   @override
@@ -112,49 +129,196 @@ class _AddProductPageState extends State<AddProductPage> with TickerProviderStat
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please sign in as a seller')));
       return;
     }
+
     setState(() => _loading = true);
     try {
-      await _service.createProduct(
-        sellerId: user.uid,
-        name: _nameCtrl.text.trim(),
-        description: _descCtrl.text.trim(),
-        price: double.tryParse(_priceCtrl.text) ?? 0,
-        unit: _unitCtrl.text.trim(),
-        imageFiles: _images,
-        latitude: _latitude ?? 0,
-        longitude: _longitude ?? 0,
-        address: _address ?? '',
-        availableQuantity: int.tryParse(_qtyCtrl.text) ?? 0,
-        category: _categoryCtrl.text.trim(),
-        onImageProgress: (index, transferred, total) {
-          if (!mounted) return;
-          setState(() {
-            if (index >= _bytesTransferred.length) {
-              while (_bytesTransferred.length <= index) {
-                _bytesTransferred.add(0);
+      final productName = _nameCtrl.text.trim();
+      final price = double.tryParse(_priceCtrl.text) ?? 0;
+      final qty = int.tryParse(_qtyCtrl.text) ?? 0;
+      Product? resultProduct;
+
+      if (_isEditing) {
+        final updated = await _service.updateProduct(
+          productId: widget.product!.id,
+          name: productName,
+          description: _descCtrl.text.trim(),
+          price: price,
+          unit: _unitCtrl.text.trim(),
+          availableQuantity: qty,
+          category: _categoryCtrl.text.trim(),
+          latitude: _latitude,
+          longitude: _longitude,
+          address: _address,
+          replaceImages: _images.isNotEmpty,
+          newImageFiles: _images.isNotEmpty ? _images : null,
+          onImageProgress: (index, transferred, total) {
+            if (!mounted) return;
+            setState(() {
+              if (index >= _bytesTransferred.length) {
+                while (_bytesTransferred.length <= index) {
+                  _bytesTransferred.add(0);
+                }
+                while (_bytesTotal.length <= index) {
+                  _bytesTotal.add(null);
+                }
               }
-              while (_bytesTotal.length <= index) {
-                _bytesTotal.add(null);
+              _bytesTransferred[index] = transferred;
+              _bytesTotal[index] = total;
+            });
+          },
+        );
+        resultProduct = updated;
+        _existingImages = List<String>.from(updated.images);
+      } else {
+        resultProduct = await _service.createProduct(
+          sellerId: user.uid,
+          name: productName,
+          description: _descCtrl.text.trim(),
+          price: price,
+          unit: _unitCtrl.text.trim(),
+          imageFiles: _images,
+          latitude: _latitude ?? 0,
+          longitude: _longitude ?? 0,
+          address: _address ?? '',
+          availableQuantity: qty,
+          category: _categoryCtrl.text.trim(),
+          onImageProgress: (index, transferred, total) {
+            if (!mounted) return;
+            setState(() {
+              if (index >= _bytesTransferred.length) {
+                while (_bytesTransferred.length <= index) {
+                  _bytesTransferred.add(0);
+                }
+                while (_bytesTotal.length <= index) {
+                  _bytesTotal.add(null);
+                }
               }
-            }
-            _bytesTransferred[index] = transferred;
-            _bytesTotal[index] = total;
-          });
-        },
-      );
+              _bytesTransferred[index] = transferred;
+              _bytesTotal[index] = total;
+            });
+          },
+        );
+      }
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Product added')));
-      Navigator.of(context).pop();
+      _showSuccessDialog(resultProduct, isEdit: _isEditing);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Error: $e'),
+          duration: const Duration(seconds: 5),
+        ));
+      }
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
+  }
+
+  void _showSuccessDialog(Product product, {required bool isEdit}) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          isEdit ? 'Product Updated' : '✓ Success!',
+          style: const TextStyle(color: Color(0xFF617A2E), fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(isEdit ? Icons.edit_note : Icons.check_circle, color: const Color(0xFF8BC34A), size: 60),
+            const SizedBox(height: 16),
+            Text(
+              isEdit ? 'Product details refreshed successfully.' : 'Your product has been added successfully!',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF617A2E).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.shopping_bag, color: Color(0xFF617A2E)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      product.name,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF617A2E)),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Tooltip(
+                  message: 'Edit this product',
+                  child: IconButton(
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      Navigator.of(context).push(MaterialPageRoute(builder: (_) => AddProductPage(product: product)));
+                    },
+                    icon: const Icon(Icons.edit, color: Color(0xFF617A2E)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Tooltip(
+                  message: 'Remove product',
+                  child: IconButton(
+                    onPressed: () async {
+                      Navigator.of(ctx).pop();
+                      try {
+                        await _service.deleteProduct(product.id);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context)
+                              .showSnackBar(const SnackBar(content: Text('Product removed.')));
+                          Navigator.of(context).maybePop();
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context)
+                              .showSnackBar(SnackBar(content: Text('Failed to remove: $e')));
+                        }
+                      }
+                    },
+                    icon: const Icon(Icons.delete, color: Colors.redAccent),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(isEdit ? 'Close' : 'Continue Selling',
+                style: const TextStyle(color: Color(0xFF617A2E), fontWeight: FontWeight.bold)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF8BC34A)),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              Navigator.of(context).pop();
+            },
+            child: Text(isEdit ? 'Back' : 'Back to Marketplace',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final pageTitle = _isEditing ? 'Edit Product' : 'Add Your Product';
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -176,9 +340,9 @@ class _AddProductPageState extends State<AddProductPage> with TickerProviderStat
                 pinned: true,
                 backgroundColor: Colors.transparent,
                 flexibleSpace: FlexibleSpaceBar(
-                  title: const Text(
-                    'Add Your Product',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                  title: Text(
+                    pageTitle,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
                   ),
                   background: Container(
                     decoration: BoxDecoration(
@@ -272,53 +436,109 @@ class _AddProductPageState extends State<AddProductPage> with TickerProviderStat
                         ),
                         const SizedBox(height: 16),
 
-                        // Price & Unit Row
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildModernTextField(
-                                controller: _priceCtrl,
-                                label: 'Price',
-                                hint: '₹0.00',
-                                icon: Icons.attach_money,
-                                keyboardType: TextInputType.number,
-                              ),
+                        // Pricing & Inventory (Flipkart style grid)
+                        Container(
+                          padding: const EdgeInsets.all(18),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.06),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.12),
+                              width: 1.5,
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _buildModernTextField(
-                                controller: _unitCtrl,
-                                label: 'Unit',
-                                hint: 'kg, bunch, etc',
-                                icon: Icons.scale,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF8BC34A).withOpacity(0.18),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Icon(Icons.sell, color: Color(0xFF8BC34A), size: 20),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: const [
+                                      Text(
+                                        'Pricing & Inventory',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                      SizedBox(height: 2),
+                                      Text(
+                                        'Match Flipkart’s clean listing layout for faster uploads',
+                                        style: TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Quantity & Category Row
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildModernTextField(
-                                controller: _qtyCtrl,
-                                label: 'Available Qty',
-                                hint: '0',
-                                icon: Icons.inventory_2,
-                                keyboardType: TextInputType.number,
+                              const SizedBox(height: 18),
+                              LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final bool isWide = constraints.maxWidth > 520;
+                                  final double fieldWidth = isWide
+                                      ? (constraints.maxWidth - 16) / 2
+                                      : constraints.maxWidth;
+                                  return Wrap(
+                                    spacing: 16,
+                                    runSpacing: 16,
+                                    children: [
+                                      SizedBox(
+                                        width: fieldWidth,
+                                        child: _buildFlipkartFieldCard(
+                                          controller: _priceCtrl,
+                                          title: 'Price (INR)',
+                                          hint: 'Enter selling price',
+                                          icon: Icons.currency_rupee,
+                                          keyboardType: TextInputType.numberWithOptions(decimal: true),
+                                        ),
+                                      ),
+                                      SizedBox(
+                                        width: fieldWidth,
+                                        child: _buildFlipkartFieldCard(
+                                          controller: _unitCtrl,
+                                          title: 'Unit',
+                                          hint: 'kg | piece | bundle',
+                                          icon: Icons.monitor_weight,
+                                        ),
+                                      ),
+                                      SizedBox(
+                                        width: fieldWidth,
+                                        child: _buildFlipkartFieldCard(
+                                          controller: _qtyCtrl,
+                                          title: 'Available Quantity',
+                                          hint: 'Total stock',
+                                          icon: Icons.inventory_2_outlined,
+                                          keyboardType: TextInputType.number,
+                                        ),
+                                      ),
+                                      SizedBox(
+                                        width: fieldWidth,
+                                        child: _buildFlipkartFieldCard(
+                                          controller: _categoryCtrl,
+                                          title: 'Category',
+                                          hint: 'Vegetables | Dairy | Cereals',
+                                          icon: Icons.category_outlined,
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
                               ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _buildModernTextField(
-                                controller: _categoryCtrl,
-                                label: 'Category',
-                                hint: 'e.g., Vegetables',
-                                icon: Icons.category,
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 24),
 
@@ -355,22 +575,79 @@ class _AddProductPageState extends State<AddProductPage> with TickerProviderStat
                                 ],
                               ),
                               const SizedBox(height: 12),
+                              if (_isEditing)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 8.0),
+                                  child: Text(
+                                    _images.isEmpty
+                                        ? 'Currently using existing gallery. Pick new images to replace.'
+                                        : 'New images will replace the existing gallery.',
+                                    style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 11),
+                                  ),
+                                ),
                               SizedBox(
-                                height: _images.isEmpty ? 80 : 110,
+                                height: (_images.isEmpty ? (_existingImages.isNotEmpty ? 110 : 80) : 110),
                                 child: _images.isEmpty
-                                    ? Center(
-                                        child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Icon(Icons.image_not_supported, color: Colors.white.withOpacity(0.5), size: 32),
-                                            const SizedBox(height: 8),
-                                            Text(
-                                              'No images selected',
-                                              style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12),
+                                    ? (_existingImages.isNotEmpty
+                                        ? ListView.builder(
+                                            scrollDirection: Axis.horizontal,
+                                            itemCount: _existingImages.length,
+                                            itemBuilder: (context, i) {
+                                              final imageUrl = _existingImages[i];
+                                              return Padding(
+                                                padding: const EdgeInsets.only(right: 8.0),
+                                                child: Stack(
+                                                  children: [
+                                                    Container(
+                                                      decoration: BoxDecoration(
+                                                        borderRadius: BorderRadius.circular(8),
+                                                        border: Border.all(
+                                                            color: const Color(0xFF8BC34A).withOpacity(0.4), width: 1),
+                                                      ),
+                                                      child: ClipRRect(
+                                                        borderRadius: BorderRadius.circular(8),
+                                                        child: Image.network(
+                                                          imageUrl,
+                                                          width: 100,
+                                                          height: 100,
+                                                          fit: BoxFit.cover,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    Positioned(
+                                                      bottom: 4,
+                                                      right: 4,
+                                                      child: Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.black.withOpacity(0.6),
+                                                          borderRadius: BorderRadius.circular(6),
+                                                        ),
+                                                        child: const Text(
+                                                          'Existing',
+                                                          style: TextStyle(color: Colors.white, fontSize: 9),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                            },
+                                          )
+                                        : Center(
+                                            child: Column(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: [
+                                                Icon(Icons.image_not_supported,
+                                                    color: Colors.white.withOpacity(0.5), size: 32),
+                                                const SizedBox(height: 8),
+                                                Text(
+                                                  'No images selected',
+                                                  style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12),
+                                                ),
+                                              ],
                                             ),
-                                          ],
-                                        ),
-                                      )
+                                          ))
                                     : ListView.builder(
                                         scrollDirection: Axis.horizontal,
                                         itemCount: _images.length,
@@ -546,9 +823,9 @@ class _AddProductPageState extends State<AddProductPage> with TickerProviderStat
                                 padding: const EdgeInsets.symmetric(vertical: 16),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               ),
-                              child: const Text(
-                                'Add Product',
-                                style: TextStyle(
+                              child: Text(
+                                _isEditing ? 'Update Product' : 'Add Product',
+                                style: const TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
                                   fontSize: 16,
@@ -584,6 +861,81 @@ class _AddProductPageState extends State<AddProductPage> with TickerProviderStat
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildFlipkartFieldCard({
+    required TextEditingController controller,
+    required String title,
+    required String hint,
+    required IconData icon,
+    TextInputType keyboardType = TextInputType.text,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF8BC34A).withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: const Color(0xFF8BC34A), size: 18),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          TextFormField(
+            controller: controller,
+            keyboardType: keyboardType,
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
+              filled: true,
+              fillColor: Colors.white.withOpacity(0.05),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.white.withOpacity(0.12)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.white.withOpacity(0.12)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFF8BC34A), width: 2),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

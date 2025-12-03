@@ -7,6 +7,7 @@ import '../../models/product.dart';
 import 'product_detail.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/product_card.dart';
+import '../seller/add_product.dart';
 
 // Small helper to animate each product card when it appears
 class AnimatedProductItem extends StatefulWidget {
@@ -57,6 +58,7 @@ class _ProductListPageState extends State<ProductListPage> with TickerProviderSt
   double? _userLng;
   bool _locationFiltered = false;
   late AnimationController _fabController;
+  final Set<String> _processingProductIds = {};
 
   @override
   void initState() {
@@ -73,6 +75,8 @@ class _ProductListPageState extends State<ProductListPage> with TickerProviderSt
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    final userId = auth.user?.uid;
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -235,12 +239,48 @@ class _ProductListPageState extends State<ProductListPage> with TickerProviderSt
                       delegate: SliverChildBuilderDelegate(
                         (context, i) {
                           final p = products[i];
+                          final isOwner = userId != null && userId == p.sellerId;
                           return AnimatedProductItem(
                             key: ValueKey(p.id),
                             index: i,
-                            child: ProductCard(
-                              product: p,
-                              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProductDetailPage(product: p))),
+                            child: Stack(
+                              children: [
+                                ProductCard(
+                                  product: p,
+                                  onTap: () => Navigator.of(context)
+                                      .push(MaterialPageRoute(builder: (_) => ProductDetailPage(product: p))),
+                                ),
+                                if (isOwner)
+                                  Positioned(
+                                    top: 12,
+                                    right: 12,
+                                    child: Row(
+                                      children: [
+                                        _buildActionChip(
+                                          icon: Icons.edit,
+                                          color: Colors.white,
+                                          background: Colors.black.withOpacity(0.45),
+                                          tooltip: 'Edit product',
+                                          onTap: _processingProductIds.contains(p.id)
+                                              ? null
+                                              : () => _navigateToEditProduct(p),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        _buildActionChip(
+                                          icon: _processingProductIds.contains(p.id)
+                                              ? Icons.hourglass_top
+                                              : Icons.delete,
+                                          color: Colors.white,
+                                          background: Colors.redAccent.withOpacity(0.75),
+                                          tooltip: 'Remove product',
+                                          onTap: _processingProductIds.contains(p.id)
+                                              ? null
+                                              : () => _confirmDeleteProduct(p),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
                             ),
                           );
                         },
@@ -256,14 +296,50 @@ class _ProductListPageState extends State<ProductListPage> with TickerProviderSt
                     delegate: SliverChildBuilderDelegate(
                       (context, i) {
                         final p = products[i];
+                        final isOwner = userId != null && userId == p.sellerId;
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 12.0),
                           child: AnimatedProductItem(
                             key: ValueKey(p.id),
                             index: i,
-                            child: ProductCard(
-                              product: p,
-                              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProductDetailPage(product: p))),
+                            child: Stack(
+                              children: [
+                                ProductCard(
+                                  product: p,
+                                  onTap: () => Navigator.of(context)
+                                      .push(MaterialPageRoute(builder: (_) => ProductDetailPage(product: p))),
+                                ),
+                                if (isOwner)
+                                  Positioned(
+                                    top: 12,
+                                    right: 12,
+                                    child: Row(
+                                      children: [
+                                        _buildActionChip(
+                                          icon: Icons.edit,
+                                          color: Colors.white,
+                                          background: Colors.black.withOpacity(0.45),
+                                          tooltip: 'Edit product',
+                                          onTap: _processingProductIds.contains(p.id)
+                                              ? null
+                                              : () => _navigateToEditProduct(p),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        _buildActionChip(
+                                          icon: _processingProductIds.contains(p.id)
+                                              ? Icons.hourglass_top
+                                              : Icons.delete,
+                                          color: Colors.white,
+                                          background: Colors.redAccent.withOpacity(0.75),
+                                          tooltip: 'Remove product',
+                                          onTap: _processingProductIds.contains(p.id)
+                                              ? null
+                                              : () => _confirmDeleteProduct(p),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
                         );
@@ -289,6 +365,76 @@ class _ProductListPageState extends State<ProductListPage> with TickerProviderSt
           ),
         );
       }),
+    );
+  }
+
+  Widget _buildActionChip({
+    required IconData icon,
+    required Color color,
+    required Color background,
+    required String tooltip,
+    VoidCallback? onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: background,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withOpacity(0.3)),
+            ),
+            child: Icon(icon, color: color, size: 16),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _navigateToEditProduct(Product product) {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => AddProductPage(product: product)));
+  }
+
+  void _confirmDeleteProduct(Product product) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove product?'),
+        content: Text('“${product.name}” will be permanently removed.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
+          ElevatedButton.icon(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              setState(() => _processingProductIds.add(product.id));
+              try {
+                await _service.deleteProduct(product.id);
+                if (!mounted) return;
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(const SnackBar(content: Text('Product removed successfully.')));
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context)
+                      .showSnackBar(SnackBar(content: Text('Failed to remove product: $e')));
+                }
+              } finally {
+                if (mounted) {
+                  setState(() => _processingProductIds.remove(product.id));
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            icon: const Icon(Icons.delete_forever, color: Colors.white, size: 18),
+            label: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
     );
   }
 }

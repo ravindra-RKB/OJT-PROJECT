@@ -1,0 +1,124 @@
+{
+  "Tomato Early Blight": {
+    "organic": "Neem oil",
+    "chemical": "Chlorothalonil",
+    "dosage": "2 ml/L",
+    "precautions": "Spray in morning, avoid direct sunlight. Wear protective gloves and mask."
+  },
+  "Tomato Late Blight": {
+    "organic": "Copper-based fungicide",
+    "chemical": "Mancozeb",
+    "dosage": "2.5 g/L",
+    "precautions": "Apply before rain. Do not apply during flowering. Wait 7 days before harvest."
+  },
+  "Tomato Leaf Mold": {
+    "organic": "Baking soda solution",
+    "chemical": "Chlorothalonil",
+    "dosage": "2 ml/L",
+    "precautions": "Improve air circulation. Spray on both sides of leaves. Avoid high humidity."
+  },
+  "Tomato Septoria Leaf Spot": {
+    "organic": "Neem oil",
+    "chemical": "Maneb",
+    "dosage": "2 g/L",
+    "precautions": "Remove infected leaves first. Spray every 7-10 days. Avoid overhead watering."
+  },
+  "Tomato Spider Mites": {
+    "organic": "Neem oil or insecticidal soap",
+    "chemical": "Abamectin",
+    "dosage": "1.5 ml/L",
+    "precautions": "Spray under leaves where mites hide. Apply in early morning. Repeat after 5 days."
+  },
+  "Tomato Target Spot": {
+    "organic": "Copper fungicide",
+    "chemical": "Azoxystrobin",
+    "dosage": "1 ml/L",
+    "precautions": "Remove affected leaves. Apply preventively. Do not exceed recommended dosage."
+  },
+  "Tomato Yellow Leaf Curl Virus": {
+    "organic": "No organic treatment available",
+    "chemical": "Systemic insecticides for vector control",
+    "dosage": "As per manufacturer",
+    "precautions": "Remove infected plants immediately. Control whiteflies. Use resistant varieties."
+  },
+  "Tomato Mosaic Virus": {
+    "organic": "No organic treatment available",
+    "chemical": "No chemical treatment available",
+    "dosage": "N/A",
+    "precautions": "Remove infected plants. Disinfect tools. Use virus-free seeds. Control aphids."
+  },
+  "Potato Early Blight": {
+    "organic": "Neem oil",
+    "chemical": "Chlorothalonil",
+    "dosage": "2 ml/L",
+    "precautions": "Start spraying when plants are 6 inches tall. Repeat every 7-10 days."
+  },
+  "Potato Late Blight": {
+    "organic": "Copper-based fungicide",
+    "chemical": "Mancozeb",
+    "dosage": "2.5 g/L",
+    "precautions": "Critical to apply before disease appears. Monitor weather conditions. Remove infected tubers."
+  },
+  "Pepper Bell Bacterial Spot": {
+    "organic": "Copper-based bactericide",
+    "chemical": "Streptomycin",
+    "dosage": "1 g/L",
+    "precautions": "Use disease-free seeds. Rotate crops. Avoid working in wet fields."
+  },
+  "Corn Common Rust": {
+    "organic": "Sulfur-based fungicide",
+    "chemical": "Propiconazole",
+    "dosage": "1.5 ml/L",
+    "precautions": "Apply at first sign of disease. Ensure good coverage. Do not apply during tasseling."
+  },
+  "Corn Gray Leaf Spot": {
+    "organic": "Copper fungicide",
+    "chemical": "Azoxystrobin",
+    "dosage": "1 ml/L",
+    "precautions": "Apply when disease first appears. Rotate crops. Remove crop residue."
+  },
+  "Apple Scab": {
+    "organic": "Sulfur or lime-sulfur",
+    "chemical": "Captan",
+    "dosage": "3 g/L",
+    "precautions": "Apply before bud break. Continue until petal fall. Remove fallen leaves in autumn."
+  },
+  "Apple Black Rot": {
+    "organic": "Copper fungicide",
+    "chemical": "Thiophanate-methyl",
+    "dosage": "2 g/L",
+    "precautions": "Prune infected branches. Remove mummified fruits. Apply during bloom period."
+  },
+  "Apple Cedar Rust": {
+    "organic": "Sulfur fungicide",
+    "chemical": "Myclobutanil",
+    "dosage": "1.5 ml/L",
+    "precautions": "Remove nearby cedar trees if possible. Apply during pink bud stage. Repeat after rain."
+  },
+  "Cherry Powdery Mildew": {
+    "organic": "Potassium bicarbonate",
+    "chemical": "Tebuconazole",
+    "dosage": "1 ml/L",
+    "precautions": "Improve air circulation. Apply at first sign. Avoid high nitrogen fertilizers."
+  },
+  "Grape Black Rot": {
+    "organic": "Copper fungicide",
+    "chemical": "Mancozeb",
+    "dosage": "2 g/L",
+    "precautions": "Apply from bud break to 4 weeks after bloom. Remove infected clusters. Prune properly."
+  },
+  "Grape Esca": {
+    "organic": "No effective organic treatment",
+    "chemical": "Tebuconazole (preventive)",
+    "dosage": "1.5 ml/L",
+    "precautions": "Remove infected vines. Avoid pruning wounds. Use disease-free planting material."
+  },
+  "Strawberry Leaf Scorch": {
+    "organic": "Copper fungicide",
+    "chemical": "Captan",
+    "dosage": "2.5 g/L",
+    "precautions": "Remove old leaves after harvest. Apply in early spring. Maintain good air circulation."
+  }
+}
+
+

@@ -19,41 +19,87 @@ class ProductService {
     try {
       final id = Uuid().v4();
       final ref = _storage.ref().child('product_images/$sellerId/$id.jpg');
+      print('ProductService: Uploading image to: product_images/$sellerId/$id.jpg');
 
       if (kIsWeb) {
         // On web we must upload bytes
+        print('ProductService: Preparing bytes for web upload...');
         Uint8List bytes;
         if (file is XFile) {
+          print('ProductService: Converting XFile to bytes');
           bytes = await file.readAsBytes();
         } else if (file is Uint8List) {
+          print('ProductService: File is already Uint8List');
           bytes = file;
         } else if (file is File) {
+          print('ProductService: Converting File to bytes');
           bytes = await file.readAsBytes();
         } else {
           throw Exception('Unsupported file type for web upload: ${file.runtimeType}');
         }
+        print('ProductService: Bytes prepared, size: ${bytes.length} bytes');
+        
         final uploadTask = ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+        print('ProductService: Upload task created, starting upload...');
+        
         // listen for progress
-        final sub = uploadTask.snapshotEvents.listen((s) {
-          try {
-            final transferred = s.bytesTransferred;
-            final total = s.totalBytes == 0 ? null : s.totalBytes;
-            if (onProgress != null) onProgress(index, transferred, total);
-          } catch (_) {}
-        });
+        final sub = uploadTask.snapshotEvents.listen(
+          (s) {
+            try {
+              final transferred = s.bytesTransferred;
+              final total = s.totalBytes == 0 ? null : s.totalBytes;
+              print('ProductService: Upload progress - $transferred / $total');
+              if (onProgress != null) onProgress(index, transferred, total);
+            } catch (e) {
+              print('ProductService: Error in progress callback: $e');
+            }
+          },
+          onError: (e) {
+            print('ProductService: Stream error during upload: $e');
+          },
+          onDone: () {
+            print('ProductService: Upload stream completed');
+          },
+        );
+        
         try {
-          // wait for completion but avoid hanging too long
-          await uploadTask.whenComplete(() {}).timeout(const Duration(seconds: 180));
-        } on TimeoutException catch (e) {
+          print('ProductService: Waiting for upload completion...');
+          // Use the task's future directly with a timeout
+          final TaskSnapshot snapshot = await uploadTask.timeout(const Duration(seconds: 120));
+          print('ProductService: Upload completed, snapshot state: ${snapshot.state}');
+          await sub.cancel();
+          
+          final url = await ref.getDownloadURL();
+          print('ProductService: Download URL obtained: $url');
+          return url;
+        } on FirebaseException catch (e) {
+          print('ProductService: Firebase exception: ${e.code} - ${e.message}');
+          try {
+            await sub.cancel();
+          } catch (_) {}
+          // Don't retry for auth/permission errors
+          if (e.code.contains('permission') || e.code.contains('auth')) {
+            throw Exception('Firebase error: ${e.code} - ${e.message}');
+          }
+          rethrow;
+        } on TimeoutException {
+          print('ProductService: Upload timed out after 120s');
           try {
             await uploadTask.cancel();
+          } catch (e) {
+            print('ProductService: Error canceling upload: $e');
+          }
+          try {
+            await sub.cancel();
           } catch (_) {}
-          await sub.cancel();
-          throw Exception('Image upload timed out (web): ${e.toString()}');
+          throw Exception('Image upload took too long and was canceled');
+        } catch (e) {
+          print('ProductService: Upload error: $e (${e.runtimeType})');
+          try {
+            await sub.cancel();
+          } catch (_) {}
+          rethrow;
         }
-        await sub.cancel();
-        final url = await ref.getDownloadURL();
-        return url;
       } else {
         // Mobile/desktop: accept dart:io File or XFile
         if (file is XFile) {
@@ -67,16 +113,23 @@ class ProductService {
             } catch (_) {}
           });
           try {
-            await uploadTask.whenComplete(() {}).timeout(const Duration(seconds: 180));
+            await uploadTask.timeout(const Duration(seconds: 300));
+            await sub.cancel();
+            return await ref.getDownloadURL();
           } on TimeoutException catch (e) {
             try {
               await uploadTask.cancel();
             } catch (_) {}
-            await sub.cancel();
+            try {
+              await sub.cancel();
+            } catch (_) {}
             throw Exception('Image upload timed out (mobile XFile): ${e.toString()}');
+          } catch (e) {
+            try {
+              await sub.cancel();
+            } catch (_) {}
+            rethrow;
           }
-          await sub.cancel();
-          return await ref.getDownloadURL();
         } else if (file is File) {
           final uploadTask = ref.putFile(file, SettableMetadata(contentType: 'image/jpeg'));
           final sub = uploadTask.snapshotEvents.listen((s) {
@@ -87,16 +140,23 @@ class ProductService {
             } catch (_) {}
           });
           try {
-            await uploadTask.whenComplete(() {}).timeout(const Duration(seconds: 180));
+            await uploadTask.timeout(const Duration(seconds: 300));
+            await sub.cancel();
+            return await ref.getDownloadURL();
           } on TimeoutException catch (e) {
             try {
               await uploadTask.cancel();
             } catch (_) {}
-            await sub.cancel();
+            try {
+              await sub.cancel();
+            } catch (_) {}
             throw Exception('Image upload timed out (mobile File): ${e.toString()}');
+          } catch (e) {
+            try {
+              await sub.cancel();
+            } catch (_) {}
+            rethrow;
           }
-          await sub.cancel();
-          return await ref.getDownloadURL();
         } else {
           throw Exception('Unsupported file type for upload: ${file.runtimeType}');
         }
@@ -121,82 +181,72 @@ class ProductService {
     void Function(int index, int bytesTransferred, int? totalBytes)? onImageProgress,
   }) async {
     final List<String> imageUrls = [];
-    // Upload images sequentially with retries and rollback on failure
-    for (int idx = 0; idx < imageFiles.length; idx++) {
-      final file = imageFiles[idx];
-      const int maxAttempts = 3;
-      int attempt = 0;
-      while (true) {
-        attempt++;
-        try {
-          // attempt upload
-          final url = await _uploadImage(file, sellerId, index: idx, onProgress: (i, transferred, total) {
-            try {
-              if (onImageProgress != null) onImageProgress(i, transferred, total);
-            } catch (_) {}
-          });
-          imageUrls.add(url);
-          break; // success -> next file
-        } catch (e) {
-          // log and retry if attempts left
+    List<String>? failedImages;
+    
+    // Upload images sequentially with retries  
+    if (imageFiles.isNotEmpty) {
+      failedImages = [];
+      for (int idx = 0; idx < imageFiles.length; idx++) {
+        final file = imageFiles[idx];
+        const int maxAttempts = 2;
+        int attempt = 0;
+        bool uploaded = false;
+        while (!uploaded && attempt < maxAttempts) {
+          attempt++;
           try {
-            print('ProductService: upload error for image #$idx attempt $attempt: $e');
-          } catch (_) {}
-          if (attempt >= maxAttempts) {
-            // rollback: delete any uploaded images so far
-            for (final uploaded in imageUrls) {
+            print('ProductService: Uploading image #${idx + 1}/${imageFiles.length} (attempt $attempt)');
+            final url = await _uploadImage(file, sellerId, index: idx, onProgress: (i, transferred, total) {
               try {
-                await _storage.refFromURL(uploaded).delete();
+                if (onImageProgress != null) onImageProgress(i, transferred, total);
               } catch (_) {}
+            });
+            print('ProductService: Image #${idx + 1} uploaded successfully');
+            imageUrls.add(url);
+            uploaded = true;
+          } catch (e) {
+            print('ProductService: upload error for image #$idx attempt $attempt: $e');
+            if (attempt >= maxAttempts) {
+              print('ProductService: Image #${idx + 1} failed after $maxAttempts attempts - will create product without this image');
+              failedImages.add('Image ${idx + 1}: $e');
+            } else {
+              // small delay before retry
+              await Future.delayed(Duration(seconds: 2 * attempt));
             }
-            throw Exception('Failed to upload image #${idx + 1}: $e');
           }
-          // small delay before retry
-          await Future.delayed(Duration(seconds: 1 * attempt));
         }
       }
+    } else {
+      print('ProductService: No images to upload');
     }
 
-    final docRef = await _db.collection(_collection).add({
-      'sellerId': sellerId,
-      'name': name,
-      'description': description,
-      'price': price,
-      'unit': unit,
-      'images': imageUrls,
-      'latitude': latitude,
-      'longitude': longitude,
-      'address': address,
-      'availableQuantity': availableQuantity,
-      'category': category,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+    print('ProductService: All images uploaded. Creating Firestore document...');
 
-    final doc = await docRef.get();
-    return Product.fromDoc(doc);
-  }
-
-  Future<List<Product>> fetchProducts({
-    double? userLat,
-    double? userLng,
-    double? maxDistanceKm,
-    String? category,
-  }) async {
-    final snapshot = await _db.collection(_collection).orderBy('createdAt', descending: true).get();
-    final products = snapshot.docs.map((d) => Product.fromDoc(d)).toList();
-
-    if (userLat != null && userLng != null && maxDistanceKm != null) {
-      products.retainWhere((p) {
-        final distance = _distanceInKm(userLat, userLng, p.latitude, p.longitude);
-        return distance <= maxDistanceKm;
+    try {
+      final docRef = await _db.collection(_collection).add({
+        'sellerId': sellerId,
+        'name': name,
+        'description': description,
+        'price': price,
+        'unit': unit,
+        'images': imageUrls,
+        'latitude': latitude,
+        'longitude': longitude,
+        'address': address,
+        'availableQuantity': availableQuantity,
+        'category': category,
+        'createdAt': FieldValue.serverTimestamp(),
       });
+
+      print('ProductService: Document created with ID: ${docRef.id}');
+      final doc = await docRef.get();
+      final product = Product.fromDoc(doc);
+      print('ProductService: Product creation complete: ${product.id}');
+      return product;
+    } catch (e) {
+      print('ProductService: Error creating product in Firestore: $e');
+      rethrow;
     }
 
-    if (category != null && category.isNotEmpty) {
-      return products.where((p) => p.category == category).toList();
-    }
-
-    return products;
   }
 
   double _distanceInKm(double lat1, double lon1, double lat2, double lon2) {
@@ -231,5 +281,117 @@ class ProductService {
       }
       return products;
     });
+  }
+
+  /// Update a product document. If [replaceImages] is true and [newImageFiles]
+  /// is provided, the old images will be deleted from storage and replaced
+  /// with newly uploaded images. Returns the updated Product.
+  Future<Product> updateProduct({
+    required String productId,
+    String? name,
+    String? description,
+    double? price,
+    String? unit,
+    List<dynamic>? newImageFiles,
+    bool replaceImages = false,
+    double? latitude,
+    double? longitude,
+    String? address,
+    int? availableQuantity,
+    String? category,
+    void Function(int index, int bytesTransferred, int? totalBytes)? onImageProgress,
+  }) async {
+    try {
+      final docRef = _db.collection(_collection).doc(productId);
+      final snapshot = await docRef.get();
+      if (!snapshot.exists) throw Exception('Product $productId not found');
+      final current = Product.fromDoc(snapshot);
+
+      List<String> uploadedUrls = List.from(current.images);
+
+      // If asked to replace images, upload new ones and delete old ones
+      if (replaceImages && newImageFiles != null) {
+        // upload new images
+        uploadedUrls = [];
+        for (int idx = 0; idx < newImageFiles.length; idx++) {
+          final file = newImageFiles[idx];
+          try {
+            final url = await _uploadImage(file, current.sellerId, index: idx, onProgress: onImageProgress);
+            uploadedUrls.add(url);
+          } catch (e) {
+            print('ProductService: Failed to upload replacement image #$idx: $e');
+          }
+        }
+
+        // delete old images from storage (best-effort)
+        for (final url in current.images) {
+          try {
+            await _deleteStorageFileByUrl(url);
+          } catch (e) {
+            print('ProductService: Failed to delete old image $url: $e');
+          }
+        }
+      }
+
+      final updateData = <String, dynamic>{};
+      if (name != null) updateData['name'] = name;
+      if (description != null) updateData['description'] = description;
+      if (price != null) updateData['price'] = price;
+      if (unit != null) updateData['unit'] = unit;
+      if (latitude != null) updateData['latitude'] = latitude;
+      if (longitude != null) updateData['longitude'] = longitude;
+      if (address != null) updateData['address'] = address;
+      if (availableQuantity != null) updateData['availableQuantity'] = availableQuantity;
+      if (category != null) updateData['category'] = category;
+      if (replaceImages) updateData['images'] = uploadedUrls;
+
+      if (updateData.isNotEmpty) {
+        updateData['updatedAt'] = FieldValue.serverTimestamp();
+        await docRef.update(updateData);
+      }
+
+      final updatedDoc = await docRef.get();
+      return Product.fromDoc(updatedDoc);
+    } catch (e) {
+      print('ProductService: Error updating product $productId: $e');
+      rethrow;
+    }
+  }
+
+  /// Delete a product and all associated images from storage.
+  Future<void> deleteProduct(String productId) async {
+    try {
+      final docRef = _db.collection(_collection).doc(productId);
+      final snapshot = await docRef.get();
+      if (!snapshot.exists) return;
+      final product = Product.fromDoc(snapshot);
+
+      // Delete images from storage (best-effort)
+      for (final url in product.images) {
+        try {
+          await _deleteStorageFileByUrl(url);
+        } catch (e) {
+          print('ProductService: Failed to delete image $url: $e');
+        }
+      }
+
+      // Delete Firestore document
+      await docRef.delete();
+      print('ProductService: Deleted product $productId');
+    } catch (e) {
+      print('ProductService: Error deleting product $productId: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> _deleteStorageFileByUrl(String url) async {
+    try {
+      final ref = _storage.refFromURL(url);
+      await ref.delete();
+      print('ProductService: Deleted storage file at $url');
+    } catch (e) {
+      print('ProductService: Error deleting storage file by URL $url: $e');
+      rethrow;
+    }
   }
 }

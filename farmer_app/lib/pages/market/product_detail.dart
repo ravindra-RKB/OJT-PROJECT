@@ -342,6 +342,35 @@ class _ProductDetailPageState extends State<ProductDetailPage>
                           ),
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            // Add to cart and navigate to checkout
+                            final cart = Provider.of<CartProvider>(context, listen: false);
+                            for (int i = 0; i < _qty; i++) {
+                              cart.add(p);
+                            }
+                            Navigator.of(context).pushNamed('/checkout');
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFF6B6B),
+                            shadowColor: const Color(0xFFFF6B6B).withOpacity(0.3),
+                            elevation: 4,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          icon: const Icon(Icons.flash_on, color: Colors.white),
+                          label: const Text('Buy Now',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16)),
+                        ),
+                      ),
                     ],
                   ),
                 ),

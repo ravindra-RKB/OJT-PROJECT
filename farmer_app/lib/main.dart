@@ -14,6 +14,7 @@ import 'providers/scheme_provider.dart';
 import 'providers/connectivity_provider.dart';
 import 'providers/profile_provider.dart';
 import 'providers/cart_provider.dart';
+import 'providers/order_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,6 +44,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
         ChangeNotifierProvider(create: (_) => ProfileProvider()),
         ChangeNotifierProvider(create: (_) => CartProvider()),
+        ChangeNotifierProvider(create: (_) => OrderProvider()),
       ],
       child: MaterialApp(
         title: 'Farmer App',
