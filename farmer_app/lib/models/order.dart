@@ -144,6 +144,56 @@ class Order {
     );
   }
 
+  /// Construct an Order from a Supabase/Postgres row representation.
+  /// Supabase will typically return timestamps as ISO strings or DateTime objects.
+  factory Order.fromSupabase(String id, Map<String, dynamic> map) {
+    DateTime parseTs(dynamic v) {
+      if (v == null) return DateTime.now();
+      if (v is DateTime) return v;
+      if (v is String) {
+        try {
+          return DateTime.parse(v);
+        } catch (_) {
+          return DateTime.now();
+        }
+      }
+      return DateTime.now();
+    }
+
+    final created = parseTs(map['created_at'] ?? map['createdAt'] ?? map['createdAt']);
+    Timestamp createdTs = Timestamp.fromDate(created);
+
+    Timestamp? parseOptional(dynamic v) {
+      if (v == null) return null;
+      final dt = parseTs(v);
+      return Timestamp.fromDate(dt);
+    }
+
+    return Order(
+      id: id,
+      buyerId: map['buyerId'] ?? map['buyer_id'] ?? '',
+      buyerName: map['buyerName'] ?? map['buyer_name'] ?? '',
+      buyerEmail: map['buyerEmail'] ?? map['buyer_email'] ?? '',
+      buyerPhone: map['buyerPhone'] ?? map['buyer_phone'] ?? '',
+      items: (map['items'] as List?)?.map((item) => OrderItem.fromMap(Map<String, dynamic>.from(item))).toList() ?? [],
+      totalAmount: (map['totalAmount'] ?? map['total_amount'] ?? 0).toDouble(),
+      status: map['status'] ?? 'pending',
+      deliveryAddress: map['deliveryAddress'] ?? map['delivery_address'] ?? '',
+      city: map['city'] ?? '',
+      state: map['state'] ?? '',
+      zipCode: map['zipCode'] ?? map['zip_code'] ?? '',
+      paymentMethod: map['paymentMethod'] ?? map['payment_method'] ?? 'cod',
+      paymentStatus: map['paymentStatus'] ?? map['payment_status'] ?? 'pending',
+      createdAt: createdTs,
+      confirmedAt: parseOptional(map['confirmedAt'] ?? map['confirmed_at']),
+      shippedAt: parseOptional(map['shippedAt'] ?? map['shipped_at']),
+      deliveredAt: parseOptional(map['deliveredAt'] ?? map['delivered_at']),
+      cancelledAt: parseOptional(map['cancelledAt'] ?? map['cancelled_at']),
+      trackingNumber: map['trackingNumber'] ?? map['tracking_number'],
+      notes: map['notes'],
+    );
+  }
+
   Order copyWith({
     String? status,
     String? paymentStatus,
