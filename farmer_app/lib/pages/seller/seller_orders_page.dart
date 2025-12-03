@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/order_provider.dart';
 import '../../models/order.dart';
-import '../../services/order_service.dart';
 
 class SellerOrdersPage extends StatefulWidget {
   const SellerOrdersPage({super.key});
@@ -15,7 +14,6 @@ class SellerOrdersPage extends StatefulWidget {
 
 class _SellerOrdersPageState extends State<SellerOrdersPage> {
   String _selectedFilter = 'all';
-  final OrderService _orderService = OrderService();
 
   @override
   void initState() {
@@ -107,8 +105,8 @@ class _SellerOrdersPageState extends State<SellerOrdersPage> {
     ];
 
     return filters.map((filter) {
-      final filterKey = filter[0] as String;
-      final filterLabel = filter[1] as String;
+      final filterKey = filter[0];
+      final filterLabel = filter[1];
       
       return Padding(
         padding: const EdgeInsets.only(right: 8),

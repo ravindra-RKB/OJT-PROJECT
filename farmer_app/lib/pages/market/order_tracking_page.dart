@@ -27,40 +27,6 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
     }
   }
 
-  String _getStatusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'pending':
-        return '#FFC107';
-      case 'confirmed':
-        return '#2196F3';
-      case 'shipped':
-        return '#FF9800';
-      case 'delivered':
-        return '#4CAF50';
-      case 'cancelled':
-        return '#F44336';
-      default:
-        return '#9E9E9E';
-    }
-  }
-
-  String _getStatusIcon(String status) {
-    switch (status.toLowerCase()) {
-      case 'pending':
-        return '⏳';
-      case 'confirmed':
-        return '✓';
-      case 'shipped':
-        return '📦';
-      case 'delivered':
-        return '✓✓';
-      case 'cancelled':
-        return '✗';
-      default:
-        return '?';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -115,9 +81,6 @@ class OrderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final statusColor = _getStatusColor(order.status);
-    final statusIcon = _getStatusIcon(order.status);
-
     return GestureDetector(
       onTap: () {
         Navigator.of(context).push(

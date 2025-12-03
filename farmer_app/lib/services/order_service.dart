@@ -76,7 +76,7 @@ class OrderService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) => snapshot.docs
-            .map((doc) => order_models.Order.fromMap(doc.id, doc.data()!))
+            .map((doc) => order_models.Order.fromMap(doc.id, doc.data()))
             .toList());
   }
 
@@ -87,7 +87,7 @@ class OrderService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) => snapshot.docs
-            .map((doc) => order_models.Order.fromMap(doc.id, doc.data()!))
+            .map((doc) => order_models.Order.fromMap(doc.id, doc.data()))
             .toList()
             .where((order) => order.items.any((item) => item.sellerId == sellerId))
             .toList());
@@ -102,7 +102,7 @@ class OrderService {
           .get();
 
       final orders = snapshot.docs
-          .map((doc) => order_models.Order.fromMap(doc.id, doc.data()!))
+          .map((doc) => order_models.Order.fromMap(doc.id, doc.data()))
           .toList();
 
       // Filter orders that contain items from this seller

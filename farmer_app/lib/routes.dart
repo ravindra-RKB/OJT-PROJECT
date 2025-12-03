@@ -16,7 +16,6 @@ import 'pages/market/order_tracking_page.dart';
 import 'pages/seller/add_product.dart';
 import 'pages/seller/seller_orders_page.dart';
 import 'pages/market/cart_page.dart';
-import 'pages/disease_detection_screen.dart';
 
 final Map<String, WidgetBuilder> appRoutes = {
   '/': (context) => const OnboardingLoginPage(),
