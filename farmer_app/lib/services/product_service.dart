@@ -5,21 +5,23 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+// Cloudinary will be used for image hosting instead of Firebase Storage
+import 'package:cloudinary_public/cloudinary_public.dart' show CloudinaryResponse;
+import 'cloudinary_service.dart';
 import 'package:uuid/uuid.dart';
 import '../models/product.dart';
 
 class ProductService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final FirebaseStorage _storage = FirebaseStorage.instance;
+  final CloudinaryService _cloudinary = CloudinaryService();
   final String _collection = 'products';
 
   Future<String> _uploadImage(dynamic file, String sellerId,
       {required int index, void Function(int index, int bytesTransferred, int? totalBytes)? onProgress}) async {
     try {
       final id = Uuid().v4();
-      final ref = _storage.ref().child('product_images/$sellerId/$id.jpg');
-      print('ProductService: Uploading image to: product_images/$sellerId/$id.jpg');
+      final folder = 'product_images/$sellerId';
+      print('ProductService: Uploading image to Cloudinary folder: $folder');
 
       if (kIsWeb) {
         // On web we must upload bytes
@@ -39,126 +41,33 @@ class ProductService {
         }
         print('ProductService: Bytes prepared, size: ${bytes.length} bytes');
         
-        final uploadTask = ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
-        print('ProductService: Upload task created, starting upload...');
-        
-        // listen for progress
-        final sub = uploadTask.snapshotEvents.listen(
-          (s) {
-            try {
-              final transferred = s.bytesTransferred;
-              final total = s.totalBytes == 0 ? null : s.totalBytes;
-              print('ProductService: Upload progress - $transferred / $total');
-              if (onProgress != null) onProgress(index, transferred, total);
-            } catch (e) {
-              print('ProductService: Error in progress callback: $e');
-            }
-          },
-          onError: (e) {
-            print('ProductService: Stream error during upload: $e');
-          },
-          onDone: () {
-            print('ProductService: Upload stream completed');
-          },
-        );
-        
+        // Upload bytes to Cloudinary (web)
         try {
-          print('ProductService: Waiting for upload completion...');
-          // Use the task's future directly with a timeout
-          final TaskSnapshot snapshot = await uploadTask.timeout(const Duration(seconds: 120));
-          print('ProductService: Upload completed, snapshot state: ${snapshot.state}');
-          await sub.cancel();
-          
-          final url = await ref.getDownloadURL();
-          print('ProductService: Download URL obtained: $url');
+          final url = await _cloudinary.uploadImage(file: bytes, folder: folder, fileName: '$id.jpg');
+          print('ProductService: Cloudinary upload completed: $url');
           return url;
-        } on FirebaseException catch (e) {
-          print('ProductService: Firebase exception: ${e.code} - ${e.message}');
-          try {
-            await sub.cancel();
-          } catch (_) {}
-          // Don't retry for auth/permission errors
-          if (e.code.contains('permission') || e.code.contains('auth')) {
-            throw Exception('Firebase error: ${e.code} - ${e.message}');
-          }
-          rethrow;
-        } on TimeoutException {
-          print('ProductService: Upload timed out after 120s');
-          try {
-            await uploadTask.cancel();
-          } catch (e) {
-            print('ProductService: Error canceling upload: $e');
-          }
-          try {
-            await sub.cancel();
-          } catch (_) {}
-          throw Exception('Image upload took too long and was canceled');
         } catch (e) {
-          print('ProductService: Upload error: $e (${e.runtimeType})');
-          try {
-            await sub.cancel();
-          } catch (_) {}
+          print('ProductService: Cloudinary upload error (web): $e');
           rethrow;
         }
       } else {
         // Mobile/desktop: accept dart:io File or XFile
-        if (file is XFile) {
-          final f = File(file.path);
-          final uploadTask = ref.putFile(f, SettableMetadata(contentType: 'image/jpeg'));
-          final sub = uploadTask.snapshotEvents.listen((s) {
-            try {
-              final transferred = s.bytesTransferred;
-              final total = s.totalBytes == 0 ? null : s.totalBytes;
-              if (onProgress != null) onProgress(index, transferred, total);
-            } catch (_) {}
-          });
-          try {
-            await uploadTask.timeout(const Duration(seconds: 300));
-            await sub.cancel();
-            return await ref.getDownloadURL();
-          } on TimeoutException catch (e) {
-            try {
-              await uploadTask.cancel();
-            } catch (_) {}
-            try {
-              await sub.cancel();
-            } catch (_) {}
-            throw Exception('Image upload timed out (mobile XFile): ${e.toString()}');
-          } catch (e) {
-            try {
-              await sub.cancel();
-            } catch (_) {}
-            rethrow;
+        // Mobile/desktop: upload file path via Cloudinary
+        try {
+          String path;
+          if (file is XFile) {
+            path = file.path;
+          } else if (file is File) {
+            path = file.path;
+          } else {
+            throw Exception('Unsupported file type for upload: ${file.runtimeType}');
           }
-        } else if (file is File) {
-          final uploadTask = ref.putFile(file, SettableMetadata(contentType: 'image/jpeg'));
-          final sub = uploadTask.snapshotEvents.listen((s) {
-            try {
-              final transferred = s.bytesTransferred;
-              final total = s.totalBytes == 0 ? null : s.totalBytes;
-              if (onProgress != null) onProgress(index, transferred, total);
-            } catch (_) {}
-          });
-          try {
-            await uploadTask.timeout(const Duration(seconds: 300));
-            await sub.cancel();
-            return await ref.getDownloadURL();
-          } on TimeoutException catch (e) {
-            try {
-              await uploadTask.cancel();
-            } catch (_) {}
-            try {
-              await sub.cancel();
-            } catch (_) {}
-            throw Exception('Image upload timed out (mobile File): ${e.toString()}');
-          } catch (e) {
-            try {
-              await sub.cancel();
-            } catch (_) {}
-            rethrow;
-          }
-        } else {
-          throw Exception('Unsupported file type for upload: ${file.runtimeType}');
+          final url = await _cloudinary.uploadImage(file: path, folder: folder, fileName: '$id.jpg');
+          print('ProductService: Cloudinary upload completed: $url');
+          return url;
+        } catch (e) {
+          print('ProductService: Cloudinary upload error (mobile): $e');
+          rethrow;
         }
       }
     } catch (e) {
@@ -386,9 +295,9 @@ class ProductService {
 
   Future<void> _deleteStorageFileByUrl(String url) async {
     try {
-      final ref = _storage.refFromURL(url);
-      await ref.delete();
-      print('ProductService: Deleted storage file at $url');
+      // Cloudinary deletion requires signed server-side requests (API secret).
+      // For now, do not attempt deletion from client; log and continue.
+      print('ProductService: _deleteStorageFileByUrl called for $url - skipping deletion on client (requires server-side API)');
     } catch (e) {
       print('ProductService: Error deleting storage file by URL $url: $e');
       rethrow;
