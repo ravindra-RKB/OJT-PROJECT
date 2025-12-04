@@ -58,19 +58,17 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
 
     setState(() => _loading = true);
     try {
-      final authProvider = context.read<AuthProvider>();
-      final success = await authProvider.signUp(email, password);
-      if (!mounted) return;
-      if (success) {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final ok = await auth.signUp(email, password);
+      if (ok) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Account created! Welcome to FarmHub 🎉')));
         Navigator.pushReplacementNamed(context, '/home');
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sign up failed. Please try again.')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sign up failed')));
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
-      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Sign up error: $e')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }

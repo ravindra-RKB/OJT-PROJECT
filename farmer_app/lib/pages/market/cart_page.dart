@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../providers/cart_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/order_service.dart';
+import '../../models/order.dart';
 
 class CartPage extends StatelessWidget {
   const CartPage({super.key});
@@ -16,18 +17,35 @@ class CartPage extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please sign in to checkout')));
       return;
     }
-    final items = cart.items
-        .map((c) => {'productId': c.product.id, 'name': c.product.name, 'price': c.product.price, 'quantity': c.quantity, 'sellerId': c.product.sellerId})
+    
+    final orderItems = cart.items
+        .map((c) => OrderItem(
+              productId: c.product.id,
+              productName: c.product.name,
+              price: c.product.price,
+              quantity: c.quantity,
+              sellerId: c.product.sellerId,
+              sellerName: '',
+              productImage: c.product.images.isNotEmpty ? c.product.images.first : '',
+            ))
         .toList();
     final total = cart.total;
+    
     try {
-      await FirebaseFirestore.instance.collection('orders').add({
-        'buyerId': user.uid,
-        'items': items,
-        'total': total,
-        'status': 'placed',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+      final orderService = OrderService();
+      await orderService.createOrder(
+        buyerId: user.id,
+        buyerName: user.email?.split('@').first ?? 'User',
+        buyerEmail: user.email ?? '',
+        buyerPhone: '',
+        items: orderItems,
+        totalAmount: total,
+        deliveryAddress: '',
+        city: '',
+        state: '',
+        zipCode: '',
+        paymentMethod: 'cod',
+      );
       cart.clear();
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Order placed')));

@@ -23,7 +23,7 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final user = auth.user;
     if (user != null) {
-      Provider.of<OrderProvider>(context, listen: false).loadBuyerOrders(user.uid);
+      Provider.of<OrderProvider>(context, listen: false).loadBuyerOrders(user.id);
     }
   }
 
@@ -107,7 +107,7 @@ class OrderCard extends StatelessWidget {
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                       const SizedBox(height: 4),
                       Text(
-                        order.createdAt.toDate().toString().split('.')[0],
+                        order.createdAt.toString().split('.')[0],
                         style: const TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                     ],
@@ -492,13 +492,13 @@ class OrderDetailPage extends StatelessWidget {
   String _getStatusDate(Order order, String status) {
     switch (status) {
       case 'pending':
-        return order.createdAt.toDate().toString().split('.')[0];
+        return order.createdAt.toString().split('.')[0];
       case 'confirmed':
-        return order.confirmedAt?.toDate().toString().split('.')[0] ?? 'Pending';
+        return order.confirmedAt?.toString().split('.')[0] ?? 'Pending';
       case 'shipped':
-        return order.shippedAt?.toDate().toString().split('.')[0] ?? 'Pending';
+        return order.shippedAt?.toString().split('.')[0] ?? 'Pending';
       case 'delivered':
-        return order.deliveredAt?.toDate().toString().split('.')[0] ?? 'Pending';
+        return order.deliveredAt?.toString().split('.')[0] ?? 'Pending';
       default:
         return '';
     }

@@ -4,73 +4,88 @@ import 'dart:typed_data';
 import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-// Cloudinary will be used for image hosting instead of Firebase Storage
-import 'cloudinary_service.dart';
-import 'supabase_service.dart';
 import 'package:uuid/uuid.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/product.dart';
 
 class ProductService {
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final CloudinaryService _cloudinary = CloudinaryService();
   final String _collection = 'products';
+  final String _bucket = 'uploads'; // ensure this bucket exists in Supabase storage
 
   Future<String> _uploadImage(dynamic file, String sellerId,
       {required int index, void Function(int index, int bytesTransferred, int? totalBytes)? onProgress}) async {
     try {
       final id = Uuid().v4();
-      final folder = 'product_images/$sellerId';
-      print('ProductService: Uploading image to Cloudinary folder: $folder');
+      final path = 'product_images/$sellerId/$id.jpg';
+      final storage = Supabase.instance.client.storage;
 
+      print('ProductService: Starting upload for image #$index to path: $path');
+
+      // Prepare data
+      Uint8List bytes;
       if (kIsWeb) {
-        // On web we must upload bytes
-        print('ProductService: Preparing bytes for web upload...');
-        Uint8List bytes;
         if (file is XFile) {
-          print('ProductService: Converting XFile to bytes');
           bytes = await file.readAsBytes();
         } else if (file is Uint8List) {
-          print('ProductService: File is already Uint8List');
           bytes = file;
         } else if (file is File) {
-          print('ProductService: Converting File to bytes');
           bytes = await file.readAsBytes();
         } else {
           throw Exception('Unsupported file type for web upload: ${file.runtimeType}');
         }
-        print('ProductService: Bytes prepared, size: ${bytes.length} bytes');
-        
-        // Upload bytes to Cloudinary (web)
-        try {
-          final url = await _cloudinary.uploadImage(file: bytes, folder: folder, fileName: '$id.jpg');
-          print('ProductService: Cloudinary upload completed: $url');
-          return url;
-        } catch (e) {
-          print('ProductService: Cloudinary upload error (web): $e');
-          rethrow;
-        }
       } else {
-        // Mobile/desktop: accept dart:io File or XFile
-        // Mobile/desktop: upload file path via Cloudinary
-        try {
-          String path;
-          if (file is XFile) {
-            path = file.path;
-          } else if (file is File) {
-            path = file.path;
-          } else {
-            throw Exception('Unsupported file type for upload: ${file.runtimeType}');
-          }
-          final url = await _cloudinary.uploadImage(file: path, folder: folder, fileName: '$id.jpg');
-          print('ProductService: Cloudinary upload completed: $url');
-          return url;
-        } catch (e) {
-          print('ProductService: Cloudinary upload error (mobile): $e');
-          rethrow;
+        if (file is XFile) {
+          final f = File(file.path);
+          bytes = await f.readAsBytes();
+        } else if (file is File) {
+          bytes = await file.readAsBytes();
+        } else if (file is Uint8List) {
+          bytes = file;
+        } else {
+          throw Exception('Unsupported file type for upload: ${file.runtimeType}');
         }
       }
+
+      print('ProductService: Image #$index bytes: ${bytes.length}');
+
+      // Attempt upload to Supabase storage
+      try {
+        print('ProductService: Attempting uploadBinary for $path');
+        await storage.from(_bucket).uploadBinary(path, bytes);
+        print('ProductService: uploadBinary succeeded for $path');
+        
+        final String publicUrl = storage.from(_bucket).getPublicUrl(path);
+        print('ProductService: Generated public URL: $publicUrl');
+        
+        if (onProgress != null) onProgress(index, bytes.length, bytes.length);
+        return publicUrl;
+      } catch (e) {
+        print('ProductService: uploadBinary failed: $e');
+        
+        // Fallback: if running on native and we have a File path, try upload(File)
+        try {
+          if (!kIsWeb && file is XFile) {
+            final f = File(file.path);
+            if (await f.exists()) {
+              print('ProductService: Attempting fallback upload() for $path');
+              await storage.from(_bucket).upload(path, f);
+              print('ProductService: upload() succeeded for $path');
+              
+              final String publicUrl = storage.from(_bucket).getPublicUrl(path);
+              print('ProductService: Generated public URL (fallback): $publicUrl');
+              
+              if (onProgress != null) onProgress(index, bytes.length, bytes.length);
+              return publicUrl;
+            }
+          }
+        } catch (e2) {
+          print('ProductService: Fallback upload() failed: $e2');
+        }
+
+        throw Exception('Supabase storage upload failed: $e');
+      }
     } catch (e) {
+      print('ProductService: Exception in _uploadImage: $e');
       rethrow;
     }
   }
@@ -91,8 +106,10 @@ class ProductService {
   }) async {
     final List<String> imageUrls = [];
     List<String>? failedImages;
-    
-    // Upload images sequentially with retries  
+
+    print('ProductService: createProduct called with ${imageFiles.length} images');
+
+    // Upload images sequentially with retries
     if (imageFiles.isNotEmpty) {
       failedImages = [];
       for (int idx = 0; idx < imageFiles.length; idx++) {
@@ -103,119 +120,60 @@ class ProductService {
         while (!uploaded && attempt < maxAttempts) {
           attempt++;
           try {
-            print('ProductService: Uploading image #${idx + 1}/${imageFiles.length} (attempt $attempt)');
+            print('ProductService: Uploading image $idx (attempt $attempt/$maxAttempts)');
             final url = await _uploadImage(file, sellerId, index: idx, onProgress: (i, transferred, total) {
               try {
                 if (onImageProgress != null) onImageProgress(i, transferred, total);
               } catch (_) {}
             });
-            print('ProductService: Image #${idx + 1} uploaded successfully');
+            print('ProductService: Successfully got URL for image $idx: $url');
             imageUrls.add(url);
             uploaded = true;
           } catch (e) {
-            print('ProductService: upload error for image #$idx attempt $attempt: $e');
+            print('ProductService: Image $idx upload failed (attempt $attempt): $e');
             if (attempt >= maxAttempts) {
-              print('ProductService: Image #${idx + 1} failed after $maxAttempts attempts - will create product without this image');
               failedImages.add('Image ${idx + 1}: $e');
             } else {
-              // small delay before retry
               await Future.delayed(Duration(seconds: 2 * attempt));
             }
           }
         }
       }
-    } else {
-      print('ProductService: No images to upload');
     }
 
-    print('ProductService: All images uploaded. Creating Firestore document...');
+    print('ProductService: Collected ${imageUrls.length} image URLs: $imageUrls');
 
     try {
-      final docRef = await _db.collection(_collection).add({
-        'sellerId': sellerId,
+      final id = Uuid().v4();
+      final record = {
+        'id': id,
+        'seller_id': sellerId,
         'name': name,
         'description': description,
         'price': price,
         'unit': unit,
-        'images': imageUrls,
+        'images': imageUrls,  // ← This MUST be saved
         'latitude': latitude,
         'longitude': longitude,
         'address': address,
-        'availableQuantity': availableQuantity,
+        'available_quantity': availableQuantity,
         'category': category,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+        'created_at': DateTime.now().toIso8601String(),
+      };
 
-      print('ProductService: Document created with ID: ${docRef.id}');
-      final doc = await docRef.get();
-      final product = Product.fromDoc(doc);
-      print('ProductService: Product creation complete: ${product.id}');
-      return product;
+      print('ProductService: Inserting product record with images: ${record['images']}');
+      
+      final res = await Supabase.instance.client.from(_collection).insert(record).select().single();
+      final data = Map<String, dynamic>.from(res);
+      
+      print('ProductService: Product inserted. Database images field: ${data['images']}');
+      
+      return Product.fromMap(data, data['id'] ?? id);
     } catch (e) {
-      print('ProductService: Error creating product in Firestore: $e');
+      print('ProductService: Error in createProduct insert: $e');
       rethrow;
     }
 
-  }
-
-  /// Create a product in Supabase (Postgres). This is an optional migration
-  /// path. The table `products` should exist with columns matching keys used
-  /// below (sellerId, name, description, price, unit, images (json), latitude,
-  /// longitude, address, availableQuantity, category, created_at).
-  Future<Product> createProductSupabase({
-    required String sellerId,
-    required String name,
-    required String description,
-    required double price,
-    required String unit,
-    required List<dynamic> imageFiles,
-    required double latitude,
-    required double longitude,
-    required String address,
-    required int availableQuantity,
-    required String category,
-    void Function(int index, int bytesTransferred, int? totalBytes)? onImageProgress,
-  }) async {
-    final List<String> imageUrls = [];
-
-    // Upload images to Cloudinary first
-    if (imageFiles.isNotEmpty) {
-      for (int idx = 0; idx < imageFiles.length; idx++) {
-        final file = imageFiles[idx];
-        try {
-          final url = await _uploadImage(file, sellerId, index: idx, onProgress: onImageProgress);
-          imageUrls.add(url);
-        } catch (e) {
-          print('ProductService: Failed to upload image #$idx to Cloudinary: $e');
-        }
-      }
-    }
-
-    final sb = SupabaseService().client;
-    try {
-      final resp = await sb.from('products').insert({
-        'sellerId': sellerId,
-        'name': name,
-        'description': description,
-        'price': price,
-        'unit': unit,
-        'images': imageUrls,
-        'latitude': latitude,
-        'longitude': longitude,
-        'address': address,
-        'availableQuantity': availableQuantity,
-        'category': category,
-      }).select().maybeSingle();
-
-      // The response may be a map representing the created row
-      final data = resp as dynamic;
-      if (data == null) throw Exception('Supabase insert returned null');
-      final id = (data['id'] ?? '').toString();
-      return Product.fromMap(Map<String, dynamic>.from(data), id);
-    } catch (e) {
-      print('ProductService: Error creating product in Supabase: $e');
-      rethrow;
-    }
   }
 
   double _distanceInKm(double lat1, double lon1, double lat2, double lon2) {
@@ -233,9 +191,24 @@ class ProductService {
 
   /// Stream products in real-time (ordered by createdAt desc)
   Stream<List<Product>> streamProducts({double? userLat, double? userLng, double? maxDistanceKm, String? category}) {
-    final qs = _db.collection(_collection).orderBy('createdAt', descending: true).snapshots();
-    return qs.map((snap) {
-      var products = snap.docs.map((d) => Product.fromDoc(d)).toList();
+    final realtime = Supabase.instance.client.from('products').stream(primaryKey: ['id']);
+    return realtime.map((payload) {
+      // payload may be a List or a single record depending on SDK - normalize
+      List<dynamic> rows;
+      try {
+        rows = List<dynamic>.from(payload as List);
+      } catch (_) {
+        if (payload is Map) {
+          rows = [payload];
+        } else {
+          rows = [];
+        }
+      }
+      var products = rows.map((r) {
+        final row = Map<String, dynamic>.from(r as Map);
+        final id = row['id']?.toString() ?? '';
+        return Product.fromMap(row, id);
+      }).toList();
 
       // client-side distance filter (optional)
       if (userLat != null && userLng != null && maxDistanceKm != null) {
@@ -271,10 +244,8 @@ class ProductService {
     void Function(int index, int bytesTransferred, int? totalBytes)? onImageProgress,
   }) async {
     try {
-      final docRef = _db.collection(_collection).doc(productId);
-      final snapshot = await docRef.get();
-      if (!snapshot.exists) throw Exception('Product $productId not found');
-      final current = Product.fromDoc(snapshot);
+      final sel = await Supabase.instance.client.from(_collection).select().eq('id', productId).single();
+      final current = Product.fromMap(Map<String, dynamic>.from(sel), productId);
 
       List<String> uploadedUrls = List.from(current.images);
 
@@ -310,17 +281,17 @@ class ProductService {
       if (latitude != null) updateData['latitude'] = latitude;
       if (longitude != null) updateData['longitude'] = longitude;
       if (address != null) updateData['address'] = address;
-      if (availableQuantity != null) updateData['availableQuantity'] = availableQuantity;
+      if (availableQuantity != null) updateData['available_quantity'] = availableQuantity;
       if (category != null) updateData['category'] = category;
       if (replaceImages) updateData['images'] = uploadedUrls;
 
       if (updateData.isNotEmpty) {
-        updateData['updatedAt'] = FieldValue.serverTimestamp();
-        await docRef.update(updateData);
+        updateData['updated_at'] = DateTime.now().toIso8601String();
+        await Supabase.instance.client.from(_collection).update(updateData).eq('id', productId).select().single();
       }
 
-      final updatedDoc = await docRef.get();
-      return Product.fromDoc(updatedDoc);
+      final updated = await Supabase.instance.client.from(_collection).select().eq('id', productId).single();
+      return Product.fromMap(Map<String, dynamic>.from(updated), productId);
     } catch (e) {
       print('ProductService: Error updating product $productId: $e');
       rethrow;
@@ -330,10 +301,8 @@ class ProductService {
   /// Delete a product and all associated images from storage.
   Future<void> deleteProduct(String productId) async {
     try {
-      final docRef = _db.collection(_collection).doc(productId);
-      final snapshot = await docRef.get();
-      if (!snapshot.exists) return;
-      final product = Product.fromDoc(snapshot);
+      final sel = await Supabase.instance.client.from(_collection).select().eq('id', productId).single();
+      final product = Product.fromMap(Map<String, dynamic>.from(sel), productId);
 
       // Delete images from storage (best-effort)
       for (final url in product.images) {
@@ -344,8 +313,8 @@ class ProductService {
         }
       }
 
-      // Delete Firestore document
-      await docRef.delete();
+      // Delete record
+      await Supabase.instance.client.from(_collection).delete().eq('id', productId);
       print('ProductService: Deleted product $productId');
     } catch (e) {
       print('ProductService: Error deleting product $productId: $e');
@@ -355,131 +324,21 @@ class ProductService {
 
   Future<void> _deleteStorageFileByUrl(String url) async {
     try {
-      // Cloudinary deletion requires signed server-side requests (API secret).
-      // For now, do not attempt deletion from client; log and continue.
-      print('ProductService: _deleteStorageFileByUrl called for $url - skipping deletion on client (requires server-side API)');
+      final uri = Uri.parse(url);
+      // Look for bucket name in path segments and extract the file path after the bucket
+      final segments = uri.pathSegments;
+      int idx = segments.indexOf(_bucket);
+      String path;
+      if (idx >= 0 && idx + 1 < segments.length) {
+        path = segments.sublist(idx + 1).join('/');
+      } else {
+        // fallback: try to extract last two segments
+        path = segments.skip(segments.length - 2).join('/');
+      }
+      await Supabase.instance.client.storage.from(_bucket).remove([path]);
+      print('ProductService: Deleted storage file at $url (path: $path)');
     } catch (e) {
       print('ProductService: Error deleting storage file by URL $url: $e');
-      rethrow;
-    }
-  }
-
-  /* ==================== Supabase Variants (Read/Update/Delete) ==================== */
-
-  /// Get a single product by ID from Supabase
-  Future<Product?> getProductByIdSupabase(String productId) async {
-    try {
-      final sb = SupabaseService().client;
-      final resp = await sb.from('products').select().eq('id', productId).maybeSingle();
-      final row = resp as dynamic;
-      if (row == null) return null;
-      return Product.fromMap(Map<String, dynamic>.from(row), row['id'].toString());
-    } catch (e) {
-      print('ProductService: Error fetching product from Supabase: $e');
-      rethrow;
-    }
-  }
-
-  /// Get all products from Supabase with optional filtering
-  Future<List<Product>> getProductsSupabase({
-    double? userLat,
-    double? userLng,
-    double? maxDistanceKm,
-    String? category,
-  }) async {
-    try {
-      final sb = SupabaseService().client;
-      final query = sb.from('products').select().order('created_at', ascending: false);
-      final resp = await query;
-      final rows = resp as List<dynamic>;
-
-      var products = rows.map((r) => Product.fromMap(Map<String, dynamic>.from(r), r['id'].toString())).toList();
-
-      // Client-side distance filter
-      if (userLat != null && userLng != null && maxDistanceKm != null) {
-        products = products.where((p) {
-          final distance = _distanceInKm(userLat, userLng, p.latitude, p.longitude);
-          return distance <= maxDistanceKm;
-        }).toList();
-      }
-
-      // Client-side category filter
-      if (category != null && category.isNotEmpty) {
-        products = products.where((p) => p.category == category).toList();
-      }
-
-      return products;
-    } catch (e) {
-      print('ProductService: Error fetching products from Supabase: $e');
-      rethrow;
-    }
-  }
-
-  /// Get seller's products from Supabase
-  Future<List<Product>> getSellerProductsSupabase(String sellerId) async {
-    try {
-      final sb = SupabaseService().client;
-      final resp = await sb.from('products').select().eq('sellerId', sellerId).order('created_at', ascending: false);
-      final rows = resp as List<dynamic>;
-      return rows.map((r) => Product.fromMap(Map<String, dynamic>.from(r), r['id'].toString())).toList();
-    } catch (e) {
-      print('ProductService: Error fetching seller products from Supabase: $e');
-      rethrow;
-    }
-  }
-
-  /// Update a product in Supabase (image replacement not yet supported)
-  Future<Product> updateProductSupabase({
-    required String productId,
-    String? name,
-    String? description,
-    double? price,
-    String? unit,
-    double? latitude,
-    double? longitude,
-    String? address,
-    int? availableQuantity,
-    String? category,
-  }) async {
-    try {
-      final sb = SupabaseService().client;
-      final updateData = <String, dynamic>{};
-
-      if (name != null) updateData['name'] = name;
-      if (description != null) updateData['description'] = description;
-      if (price != null) updateData['price'] = price;
-      if (unit != null) updateData['unit'] = unit;
-      if (latitude != null) updateData['latitude'] = latitude;
-      if (longitude != null) updateData['longitude'] = longitude;
-      if (address != null) updateData['address'] = address;
-      if (availableQuantity != null) updateData['availableQuantity'] = availableQuantity;
-      if (category != null) updateData['category'] = category;
-
-      if (updateData.isEmpty) {
-        // No updates; just fetch and return current product
-        return (await getProductByIdSupabase(productId)) ??
-            (throw Exception('Product $productId not found'));
-      }
-
-      updateData['updated_at'] = DateTime.now().toIso8601String();
-      await sb.from('products').update(updateData).eq('id', productId);
-
-      final updated = await getProductByIdSupabase(productId);
-      return updated ?? (throw Exception('Product $productId not found after update'));
-    } catch (e) {
-      print('ProductService: Error updating product in Supabase: $e');
-      rethrow;
-    }
-  }
-
-  /// Delete a product from Supabase
-  Future<void> deleteProductSupabase(String productId) async {
-    try {
-      final sb = SupabaseService().client;
-      await sb.from('products').delete().eq('id', productId);
-      print('ProductService: Deleted product $productId from Supabase');
-    } catch (e) {
-      print('ProductService: Error deleting product from Supabase: $e');
       rethrow;
     }
   }

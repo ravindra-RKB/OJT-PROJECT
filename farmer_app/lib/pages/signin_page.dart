@@ -44,18 +44,16 @@ class _SignInPageState extends State<SignInPage> with TickerProviderStateMixin {
     }
     setState(() => _loading = true);
     try {
-      final authProvider = context.read<AuthProvider>();
-      final success = await authProvider.signIn(email, password);
-      if (!mounted) return;
-      if (success) {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final ok = await auth.signIn(email, password);
+      if (ok) {
+        if (!mounted) return;
         Navigator.pushReplacementNamed(context, '/home');
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sign in failed. Please check your credentials.')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sign in failed')));
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
-      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Sign in error: $e')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }

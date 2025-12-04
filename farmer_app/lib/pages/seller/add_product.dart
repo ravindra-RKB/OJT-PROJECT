@@ -171,7 +171,7 @@ class _AddProductPageState extends State<AddProductPage> with TickerProviderStat
         _existingImages = List<String>.from(updated.images);
       } else {
         resultProduct = await _service.createProduct(
-          sellerId: user.uid,
+          sellerId: user.id,
           name: productName,
           description: _descCtrl.text.trim(),
           price: price,
@@ -314,26 +314,17 @@ class _AddProductPageState extends State<AddProductPage> with TickerProviderStat
             ],
           ),
           actions: [
-            TextButton(
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF8BC34A)),
               onPressed: () {
                 Navigator.of(ctx).pop();
                 if (!isEdit) {
-                  // After adding, navigate to marketplace page
                   Navigator.of(context).pushNamedAndRemoveUntil('/marketplace', (route) => route.isFirst);
                 } else {
                   Navigator.of(context).pop();
                 }
               },
               child: Text(isEdit ? 'Close' : 'Go to Marketplace',
-                  style: const TextStyle(color: Color(0xFF617A2E), fontWeight: FontWeight.bold)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF8BC34A)),
-              onPressed: () {
-                Navigator.of(ctx).pop();
-                Navigator.of(context).pop();
-              },
-              child: Text(isEdit ? 'Back' : 'Add Another Product',
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],
@@ -361,7 +352,7 @@ class _AddProductPageState extends State<AddProductPage> with TickerProviderStat
           child: CustomScrollView(
             slivers: [
               SliverAppBar(
-                expandedHeight: 140,
+                expandedHeight: 80,
                 floating: true,
                 pinned: true,
                 backgroundColor: Colors.transparent,
@@ -376,48 +367,6 @@ class _AddProductPageState extends State<AddProductPage> with TickerProviderStat
                         colors: [const Color(0xFF1B3A0B), const Color(0xFF2D5016)],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
-                      ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.only(left: 16),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF8BC34A).withOpacity(0.3),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: const Icon(Icons.agriculture, color: Color(0xFF8BC34A), size: 24),
-                                ),
-                                const SizedBox(width: 12),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Fresh from Your Farm',
-                                      style: TextStyle(
-                                        color: Colors.white.withOpacity(0.9),
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    const Text(
-                                      'Reach customers directly',
-                                      style: TextStyle(color: Color(0xFF8BC34A), fontSize: 11),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
                       ),
                     ),
                   ),
@@ -496,14 +445,6 @@ class _AddProductPageState extends State<AddProductPage> with TickerProviderStat
                                           color: Colors.white,
                                           fontWeight: FontWeight.w700,
                                           fontSize: 16,
-                                        ),
-                                      ),
-                                      SizedBox(height: 2),
-                                      Text(
-                                        'Match Flipkart’s clean listing layout for faster uploads',
-                                        style: TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 12,
                                         ),
                                       ),
                                     ],

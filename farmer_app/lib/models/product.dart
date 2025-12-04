@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class Product {
   final String id;
   final String sellerId;
@@ -13,7 +11,7 @@ class Product {
   final String address;
   final int availableQuantity;
   final String category;
-  final Timestamp createdAt;
+  final DateTime createdAt;
 
   Product({
     required this.id,
@@ -33,7 +31,8 @@ class Product {
 
   Map<String, dynamic> toMap() {
     return {
-      'sellerId': sellerId,
+      'id': id,
+      'seller_id': sellerId,
       'name': name,
       'description': description,
       'price': price,
@@ -42,65 +41,29 @@ class Product {
       'latitude': latitude,
       'longitude': longitude,
       'address': address,
-      'availableQuantity': availableQuantity,
+      'available_quantity': availableQuantity,
       'category': category,
-      'createdAt': createdAt,
+      'created_at': createdAt.toIso8601String(),
     };
   }
 
-  factory Product.fromDoc(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    return Product(
-      id: doc.id,
-      sellerId: data['sellerId'] ?? '',
-      name: data['name'] ?? '',
-      description: data['description'] ?? '',
-      price: (data['price'] ?? 0).toDouble(),
-      unit: data['unit'] ?? '',
-      images: List<String>.from(data['images'] ?? []),
-      latitude: (data['latitude'] ?? 0).toDouble(),
-      longitude: (data['longitude'] ?? 0).toDouble(),
-      address: data['address'] ?? '',
-      availableQuantity: (data['availableQuantity'] ?? 0).toInt(),
-      category: data['category'] ?? '',
-      createdAt: data['createdAt'] ?? Timestamp.now(),
-    );
-  }
-
-  /// Construct from a plain map (e.g., returned by Supabase). Expects
-  /// timestamps under `created_at` (ISO string) or `createdAt`.
   factory Product.fromMap(Map<String, dynamic> map, String id) {
-    dynamic created = map['created_at'] ?? map['createdAt'];
-    Timestamp ts;
-    try {
-      if (created == null) {
-        ts = Timestamp.now();
-      } else if (created is String) {
-        ts = Timestamp.fromDate(DateTime.parse(created));
-      } else if (created is DateTime) {
-        ts = Timestamp.fromDate(created);
-      } else {
-        // Fallback
-        ts = Timestamp.now();
-      }
-    } catch (_) {
-      ts = Timestamp.now();
-    }
-
     return Product(
       id: id,
-      sellerId: map['sellerId'] ?? map['seller_id'] ?? '',
+      sellerId: map['seller_id'] ?? map['sellerId'] ?? '',
       name: map['name'] ?? '',
       description: map['description'] ?? '',
       price: (map['price'] ?? 0).toDouble(),
       unit: map['unit'] ?? '',
       images: List<String>.from(map['images'] ?? []),
-      latitude: (map['latitude'] ?? 0).toDouble(),
-      longitude: (map['longitude'] ?? 0).toDouble(),
+      latitude: (map['latitude'] ?? map['lat'] ?? 0).toDouble(),
+      longitude: (map['longitude'] ?? map['lng'] ?? 0).toDouble(),
       address: map['address'] ?? '',
-      availableQuantity: (map['availableQuantity'] ?? map['available_quantity'] ?? 0).toInt(),
+      availableQuantity: (map['available_quantity'] ?? map['availableQuantity'] ?? 0).toInt(),
       category: map['category'] ?? '',
-      createdAt: ts,
+      createdAt: map['created_at'] is String
+          ? DateTime.parse(map['created_at'])
+          : (map['created_at'] is DateTime ? map['created_at'] : DateTime.now()),
     );
   }
 }

@@ -1,11 +1,11 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/order.dart' as order_models;
-import 'supabase_service.dart';
 
 class OrderService {
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final String _collection = 'orders';
+  final String _ordersCollection = 'orders';
   final String _productsCollection = 'products';
+
+  SupabaseClient get _db => Supabase.instance.client;
 
   /// Create a new order
   Future<order_models.Order> createOrder({
@@ -22,37 +22,40 @@ class OrderService {
     required String paymentMethod,
   }) async {
     try {
-      final orderRef = _db.collection(_collection).doc();
+      final now = DateTime.now().toIso8601String();
+      final itemsJson = items.map((i) => i.toMap()).toList();
 
-      final order = order_models.Order(
-        id: orderRef.id,
-        buyerId: buyerId,
-        buyerName: buyerName,
-        buyerEmail: buyerEmail,
-        buyerPhone: buyerPhone,
-        items: items,
-        totalAmount: totalAmount,
-        status: 'pending',
-        deliveryAddress: deliveryAddress,
-        city: city,
-        state: state,
-        zipCode: zipCode,
-        paymentMethod: paymentMethod,
-        paymentStatus: paymentMethod == 'cod' ? 'pending' : 'pending',
-        createdAt: Timestamp.now(),
-      );
+      final orderData = {
+        'buyer_id': buyerId,
+        'buyer_name': buyerName,
+        'buyer_email': buyerEmail,
+        'buyer_phone': buyerPhone,
+        'items': itemsJson, // JSONB
+        'total_amount': totalAmount,
+        'status': 'pending',
+        'delivery_address': deliveryAddress,
+        'city': city,
+        'state': state,
+        'zip_code': zipCode,
+        'payment_method': paymentMethod,
+        'payment_status': paymentMethod == 'cod' ? 'pending' : 'pending',
+        'created_at': now,
+      };
 
-      // Save order to Firestore
-      await orderRef.set(order.toMap());
+      // Insert order
+      final res = await _db.from(_ordersCollection).insert(orderData).select().single();
 
-      // Update product quantities
+      final orderId = res['id']?.toString() ?? '';
+
+      // Atomically update product quantities
       for (final item in items) {
-        await _db.collection(_productsCollection).doc(item.productId).update({
-          'availableQuantity': FieldValue.increment(-item.quantity),
-        });
+        await _db.from(_productsCollection)
+            .update({'available_quantity': 'available_quantity - ${item.quantity}'})
+            .eq('id', item.productId);
       }
 
-      return order;
+      // Return the created order
+      return order_models.Order.fromMap(orderId, Map<String, dynamic>.from(res));
     } catch (e) {
       throw Exception('Failed to create order: $e');
     }
@@ -61,49 +64,82 @@ class OrderService {
   /// Get order by ID
   Future<order_models.Order?> getOrderById(String orderId) async {
     try {
-      final doc = await _db.collection(_collection).doc(orderId).get();
-      if (!doc.exists) return null;
-      return order_models.Order.fromMap(doc.id, doc.data()!);
+      final res = await _db.from(_ordersCollection).select().eq('id', orderId).single();
+      return order_models.Order.fromMap(orderId, Map<String, dynamic>.from(res));
     } catch (e) {
-      throw Exception('Failed to fetch order: $e');
+      return null; // Not found
     }
   }
 
   /// Get all orders for a buyer
   Stream<List<order_models.Order>> getBuyerOrders(String buyerId) {
-    return _db
-        .collection(_collection)
-        .where('buyerId', isEqualTo: buyerId)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => order_models.Order.fromMap(doc.id, doc.data()))
-            .toList());
+    final realtime = _db.from(_ordersCollection).stream(primaryKey: ['id']);
+    return realtime.map((payload) {
+      try {
+        List<dynamic> rows;
+        try {
+          rows = List<dynamic>.from(payload as List);
+        } catch (_) {
+          if (payload is Map) {
+            rows = [payload];
+          } else {
+            rows = [];
+          }
+        }
+        return rows
+            .map((r) {
+              final row = Map<String, dynamic>.from(r as Map);
+              final id = row['id']?.toString() ?? '';
+              return order_models.Order.fromMap(id, row);
+            })
+            .where((order) => order.buyerId == buyerId)
+            .toList();
+      } catch (e) {
+        print('Error parsing buyer orders: $e');
+        return [];
+      }
+    });
   }
 
   /// Get all orders for a seller (by product seller ID)
   Stream<List<order_models.Order>> getSellerOrders(String sellerId) {
-    return _db
-        .collection(_collection)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => order_models.Order.fromMap(doc.id, doc.data()))
-            .toList()
+    final realtime = _db.from(_ordersCollection).stream(primaryKey: ['id']);
+    return realtime.map((payload) {
+      try {
+        List<dynamic> rows;
+        try {
+          rows = List<dynamic>.from(payload as List);
+        } catch (_) {
+          if (payload is Map) {
+            rows = [payload];
+          } else {
+            rows = [];
+          }
+        }
+        return rows
+            .map((r) {
+              final row = Map<String, dynamic>.from(r as Map);
+              final id = row['id']?.toString() ?? '';
+              return order_models.Order.fromMap(id, row);
+            })
             .where((order) => order.items.any((item) => item.sellerId == sellerId))
-            .toList());
+            .toList();
+      } catch (e) {
+        print('Error parsing seller orders: $e');
+        return [];
+      }
+    });
   }
 
   /// Get seller's orders with a specific seller ID in items
   Future<List<order_models.Order>> getSellerOrdersAdvanced(String sellerId) async {
     try {
-      final snapshot = await _db
-          .collection(_collection)
-          .orderBy('createdAt', descending: true)
-          .get();
-
-      final orders = snapshot.docs
-          .map((doc) => order_models.Order.fromMap(doc.id, doc.data()))
+      final rows = await _db.from(_ordersCollection).select();
+      final orders = (rows as List)
+          .map((row) {
+            final id = row['id']?.toString() ?? '';
+            return order_models.Order.fromMap(id, Map<String, dynamic>.from(row));
+          })
           .toList();
 
       // Filter orders that contain items from this seller
@@ -116,30 +152,31 @@ class OrderService {
   /// Update order status
   Future<void> updateOrderStatus(String orderId, String newStatus) async {
     try {
+      final now = DateTime.now().toIso8601String();
       final updateData = <String, dynamic>{'status': newStatus};
 
       // Add timestamp based on status
       if (newStatus == 'confirmed') {
-        updateData['confirmedAt'] = Timestamp.now();
+        updateData['confirmed_at'] = now;
       } else if (newStatus == 'shipped') {
-        updateData['shippedAt'] = Timestamp.now();
+        updateData['shipped_at'] = now;
       } else if (newStatus == 'delivered') {
-        updateData['deliveredAt'] = Timestamp.now();
+        updateData['delivered_at'] = now;
       } else if (newStatus == 'cancelled') {
-        updateData['cancelledAt'] = Timestamp.now();
+        updateData['cancelled_at'] = now;
 
         // Restore product quantities
         final orderToCancel = await getOrderById(orderId);
         if (orderToCancel != null) {
           for (final item in orderToCancel.items) {
-            await _db.collection(_productsCollection).doc(item.productId).update({
-              'availableQuantity': FieldValue.increment(item.quantity),
-            });
+            await _db.from(_productsCollection)
+                .update({'available_quantity': 'available_quantity + ${item.quantity}'})
+                .eq('id', item.productId);
           }
         }
       }
 
-      await _db.collection(_collection).doc(orderId).update(updateData);
+      await _db.from(_ordersCollection).update(updateData).eq('id', orderId);
     } catch (e) {
       throw Exception('Failed to update order status: $e');
     }
@@ -148,9 +185,9 @@ class OrderService {
   /// Update payment status
   Future<void> updatePaymentStatus(String orderId, String paymentStatus) async {
     try {
-      await _db.collection(_collection).doc(orderId).update({
-        'paymentStatus': paymentStatus,
-      });
+      await _db.from(_ordersCollection).update({
+        'payment_status': paymentStatus,
+      }).eq('id', orderId);
     } catch (e) {
       throw Exception('Failed to update payment status: $e');
     }
@@ -159,11 +196,12 @@ class OrderService {
   /// Add tracking number
   Future<void> addTrackingNumber(String orderId, String trackingNumber) async {
     try {
-      await _db.collection(_collection).doc(orderId).update({
-        'trackingNumber': trackingNumber,
-        'shippedAt': Timestamp.now(),
+      final now = DateTime.now().toIso8601String();
+      await _db.from(_ordersCollection).update({
+        'tracking_number': trackingNumber,
+        'shipped_at': now,
         'status': 'shipped',
-      });
+      }).eq('id', orderId);
     } catch (e) {
       throw Exception('Failed to add tracking number: $e');
     }
@@ -193,126 +231,6 @@ class OrderService {
       };
     } catch (e) {
       throw Exception('Failed to fetch order stats: $e');
-    }
-  }
-
-  /* ----------------- Supabase variants (incremental migration) ----------------- */
-
-  /// Create a new order in Supabase (Postgres). Assumes a `orders` table
-  /// with appropriate columns and an `items` jsonb column.
-  Future<order_models.Order> createOrderSupabase({
-    required String buyerId,
-    required String buyerName,
-    required String buyerEmail,
-    required String buyerPhone,
-    required List<order_models.OrderItem> items,
-    required double totalAmount,
-    required String deliveryAddress,
-    required String city,
-    required String state,
-    required String zipCode,
-    required String paymentMethod,
-  }) async {
-    try {
-      final sb = SupabaseService().client;
-      final itemsMap = items.map((i) => i.toMap()).toList();
-
-      final insert = await sb.from('orders').insert({
-        'buyerId': buyerId,
-        'buyerName': buyerName,
-        'buyerEmail': buyerEmail,
-        'buyerPhone': buyerPhone,
-        'items': itemsMap,
-        'totalAmount': totalAmount,
-        'status': 'pending',
-        'deliveryAddress': deliveryAddress,
-        'city': city,
-        'state': state,
-        'zipCode': zipCode,
-        'paymentMethod': paymentMethod,
-        'paymentStatus': paymentMethod == 'cod' ? 'pending' : 'pending',
-      }).select().maybeSingle();
-
-      final row = insert as dynamic;
-      if (row == null) throw Exception('Supabase insert returned null');
-      final id = (row['id'] ?? '').toString();
-
-      // Decrement product quantities in Supabase as well (if products table exists)
-      for (final item in items) {
-        try {
-          final prod = await sb.from('products').select('availableQuantity').eq('id', item.productId).maybeSingle();
-          final current = (prod != null && prod['availableQuantity'] != null) ? (prod['availableQuantity'] as int) : 0;
-          await sb.from('products').update({
-            'availableQuantity': current - item.quantity,
-          }).eq('id', item.productId);
-        } catch (_) {
-          // best-effort; ignore
-        }
-      }
-
-      return order_models.Order.fromSupabase(id, Map<String, dynamic>.from(row));
-    } catch (e) {
-      throw Exception('Failed to create Supabase order: $e');
-    }
-  }
-
-  /// Supabase variant
-  Future<order_models.Order?> getOrderByIdSupabase(String orderId) async {
-    try {
-      final sb = SupabaseService().client;
-      final resp = await sb.from('orders').select().eq('id', orderId).maybeSingle();
-      final row = resp as dynamic;
-      if (row == null) return null;
-      return order_models.Order.fromSupabase(row['id'].toString(), Map<String, dynamic>.from(row));
-    } catch (e) {
-      throw Exception('Failed to fetch order from Supabase: $e');
-    }
-  }
-
-  /// Supabase variant (returns Future list instead of stream)
-  Future<List<order_models.Order>> getBuyerOrdersSupabase(String buyerId) async {
-    try {
-      final sb = SupabaseService().client;
-      final resp = await sb.from('orders').select().eq('buyerId', buyerId).order('created_at', ascending: false);
-      final rows = resp as List<dynamic>;
-      return rows.map((r) => order_models.Order.fromSupabase(r['id'].toString(), Map<String, dynamic>.from(r))).toList();
-    } catch (e) {
-      throw Exception('Failed to fetch buyer orders from Supabase: $e');
-    }
-  }
-
-  /// Supabase variant for updating status
-  Future<void> updateOrderStatusSupabase(String orderId, String newStatus) async {
-    try {
-      final sb = SupabaseService().client;
-      final updateData = <String, dynamic>{'status': newStatus};
-
-      if (newStatus == 'confirmed') {
-        updateData['confirmedAt'] = DateTime.now().toIso8601String();
-      } else if (newStatus == 'shipped') {
-        updateData['shippedAt'] = DateTime.now().toIso8601String();
-      } else if (newStatus == 'delivered') {
-        updateData['deliveredAt'] = DateTime.now().toIso8601String();
-      } else if (newStatus == 'cancelled') {
-        updateData['cancelledAt'] = DateTime.now().toIso8601String();
-
-        final orderToCancel = await getOrderByIdSupabase(orderId);
-        if (orderToCancel != null) {
-          for (final item in orderToCancel.items) {
-            try {
-              final prod = await sb.from('products').select('availableQuantity').eq('id', item.productId).maybeSingle();
-              final current = (prod != null && prod['availableQuantity'] != null) ? (prod['availableQuantity'] as int) : 0;
-              await sb.from('products').update({
-                'availableQuantity': current + item.quantity,
-              }).eq('id', item.productId);
-            } catch (_) {}
-          }
-        }
-      }
-
-      await sb.from('orders').update(updateData).eq('id', orderId);
-    } catch (e) {
-      throw Exception('Failed to update Supabase order status: $e');
     }
   }
 }

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart' as app_auth;
 import '../providers/profile_provider.dart';
@@ -23,7 +23,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = Supabase.instance.client.auth.currentUser;
     final authProvider = context.read<app_auth.AuthProvider>();
     final profileProvider = context.watch<ProfileProvider>();
 
@@ -130,7 +130,7 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
           const SizedBox(height: 20),
           Text(
-            profile?.name ?? user?.displayName ?? user?.email?.split('@')[0] ?? 'Farmer',
+            profile?.name ?? user?.userMetadata?['name'] ?? user?.email?.split('@')[0] ?? 'Farmer',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 24,
@@ -334,7 +334,7 @@ class _ProfilePageState extends State<ProfilePage> {
   void _showEditProfileDialog(BuildContext context) {
     final profileProvider = context.read<ProfileProvider>();
     final profile = profileProvider.profile;
-    final user = FirebaseAuth.instance.currentUser;
+    final user = Supabase.instance.client.auth.currentUser;
 
     if (profile == null || user == null) return;
 

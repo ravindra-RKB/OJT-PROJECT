@@ -153,9 +153,26 @@ class _SchemesPageState extends State<SchemesPage> {
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: () async {
-                        final uri = Uri.parse(scheme.applicationLink!);
-                        if (await canLaunchUrl(uri)) {
-                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        try {
+                          var link = scheme.applicationLink!.trim();
+                          // Add scheme if missing
+                          if (!link.startsWith('http://') && !link.startsWith('https://')) {
+                            link = 'https://$link';
+                          }
+                          final uri = Uri.parse(link);
+                          if (await canLaunchUrl(uri)) {
+                            await launchUrl(uri, mode: LaunchMode.externalApplication);
+                          } else {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Cannot open link on this device')),
+                            );
+                          }
+                        } catch (e) {
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Failed to open link: $e')),
+                          );
                         }
                       },
                       style: ElevatedButton.styleFrom(

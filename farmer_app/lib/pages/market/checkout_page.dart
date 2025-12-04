@@ -33,8 +33,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
     super.initState();
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final user = auth.user;
+    final displayName = user?.userMetadata?['full_name'] as String? ?? user?.email?.split('@').first ?? '';
     
-    _nameCtrl = TextEditingController(text: user?.displayName ?? '');
+    _nameCtrl = TextEditingController(text: displayName);
     _emailCtrl = TextEditingController(text: user?.email ?? '');
     _phoneCtrl = TextEditingController();
     _addressCtrl = TextEditingController();
@@ -97,7 +98,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
       // Create order through order provider
       final order = await orderProvider.createOrder(
-        buyerId: user.uid,
+        buyerId: user.id,
         buyerName: _nameCtrl.text,
         buyerEmail: _emailCtrl.text,
         buyerPhone: _phoneCtrl.text,

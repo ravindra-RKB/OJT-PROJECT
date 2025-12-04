@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class OrderItem {
   final String productId;
   final String productName;
@@ -21,25 +19,25 @@ class OrderItem {
 
   Map<String, dynamic> toMap() {
     return {
-      'productId': productId,
-      'productName': productName,
+      'product_id': productId,
+      'product_name': productName,
       'price': price,
       'quantity': quantity,
-      'sellerId': sellerId,
-      'sellerName': sellerName,
-      'productImage': productImage,
+      'seller_id': sellerId,
+      'seller_name': sellerName,
+      'product_image': productImage,
     };
   }
 
   factory OrderItem.fromMap(Map<String, dynamic> map) {
     return OrderItem(
-      productId: map['productId'] ?? '',
-      productName: map['productName'] ?? '',
+      productId: map['product_id'] ?? map['productId'] ?? '',
+      productName: map['product_name'] ?? map['productName'] ?? '',
       price: (map['price'] ?? 0).toDouble(),
       quantity: map['quantity'] ?? 1,
-      sellerId: map['sellerId'] ?? '',
-      sellerName: map['sellerName'] ?? '',
-      productImage: map['productImage'] ?? '',
+      sellerId: map['seller_id'] ?? map['sellerId'] ?? '',
+      sellerName: map['seller_name'] ?? map['sellerName'] ?? '',
+      productImage: map['product_image'] ?? map['productImage'] ?? '',
     );
   }
 }
@@ -59,11 +57,11 @@ class Order {
   final String zipCode;
   final String paymentMethod; // cod, online
   final String paymentStatus; // pending, completed, failed
-  final Timestamp createdAt;
-  final Timestamp? confirmedAt;
-  final Timestamp? shippedAt;
-  final Timestamp? deliveredAt;
-  final Timestamp? cancelledAt;
+  final DateTime createdAt;
+  final DateTime? confirmedAt;
+  final DateTime? shippedAt;
+  final DateTime? deliveredAt;
+  final DateTime? cancelledAt;
   final String? trackingNumber;
   final String? notes;
 
@@ -95,101 +93,54 @@ class Order {
 
   Map<String, dynamic> toMap() {
     return {
-      'buyerId': buyerId,
-      'buyerName': buyerName,
-      'buyerEmail': buyerEmail,
-      'buyerPhone': buyerPhone,
+      'buyer_id': buyerId,
+      'buyer_name': buyerName,
+      'buyer_email': buyerEmail,
+      'buyer_phone': buyerPhone,
       'items': items.map((item) => item.toMap()).toList(),
-      'totalAmount': totalAmount,
+      'total_amount': totalAmount,
       'status': status,
-      'deliveryAddress': deliveryAddress,
+      'delivery_address': deliveryAddress,
       'city': city,
       'state': state,
-      'zipCode': zipCode,
-      'paymentMethod': paymentMethod,
-      'paymentStatus': paymentStatus,
-      'createdAt': createdAt,
-      'confirmedAt': confirmedAt,
-      'shippedAt': shippedAt,
-      'deliveredAt': deliveredAt,
-      'cancelledAt': cancelledAt,
-      'trackingNumber': trackingNumber,
+      'zip_code': zipCode,
+      'payment_method': paymentMethod,
+      'payment_status': paymentStatus,
+      'created_at': createdAt.toIso8601String(),
+      'confirmed_at': confirmedAt?.toIso8601String(),
+      'shipped_at': shippedAt?.toIso8601String(),
+      'delivered_at': deliveredAt?.toIso8601String(),
+      'cancelled_at': cancelledAt?.toIso8601String(),
+      'tracking_number': trackingNumber,
       'notes': notes,
     };
   }
 
   factory Order.fromMap(String id, Map<String, dynamic> map) {
+    final itemsRaw = map['items'] as List? ?? [];
     return Order(
       id: id,
-      buyerId: map['buyerId'] ?? '',
-      buyerName: map['buyerName'] ?? '',
-      buyerEmail: map['buyerEmail'] ?? '',
-      buyerPhone: map['buyerPhone'] ?? '',
-      items: (map['items'] as List?)?.map((item) => OrderItem.fromMap(item)).toList() ?? [],
-      totalAmount: (map['totalAmount'] ?? 0).toDouble(),
+      buyerId: map['buyer_id'] ?? map['buyerId'] ?? '',
+      buyerName: map['buyer_name'] ?? map['buyerName'] ?? '',
+      buyerEmail: map['buyer_email'] ?? map['buyerEmail'] ?? '',
+      buyerPhone: map['buyer_phone'] ?? map['buyerPhone'] ?? '',
+      items: itemsRaw.map((item) => OrderItem.fromMap(Map<String, dynamic>.from(item))).toList(),
+      totalAmount: (map['total_amount'] ?? map['totalAmount'] ?? 0).toDouble(),
       status: map['status'] ?? 'pending',
-      deliveryAddress: map['deliveryAddress'] ?? '',
+      deliveryAddress: map['delivery_address'] ?? map['deliveryAddress'] ?? '',
       city: map['city'] ?? '',
       state: map['state'] ?? '',
-      zipCode: map['zipCode'] ?? '',
-      paymentMethod: map['paymentMethod'] ?? 'cod',
-      paymentStatus: map['paymentStatus'] ?? 'pending',
-      createdAt: map['createdAt'] ?? Timestamp.now(),
-      confirmedAt: map['confirmedAt'],
-      shippedAt: map['shippedAt'],
-      deliveredAt: map['deliveredAt'],
-      cancelledAt: map['cancelledAt'],
-      trackingNumber: map['trackingNumber'],
-      notes: map['notes'],
-    );
-  }
-
-  /// Construct an Order from a Supabase/Postgres row representation.
-  /// Supabase will typically return timestamps as ISO strings or DateTime objects.
-  factory Order.fromSupabase(String id, Map<String, dynamic> map) {
-    DateTime parseTs(dynamic v) {
-      if (v == null) return DateTime.now();
-      if (v is DateTime) return v;
-      if (v is String) {
-        try {
-          return DateTime.parse(v);
-        } catch (_) {
-          return DateTime.now();
-        }
-      }
-      return DateTime.now();
-    }
-
-    final created = parseTs(map['created_at'] ?? map['createdAt'] ?? map['createdAt']);
-    Timestamp createdTs = Timestamp.fromDate(created);
-
-    Timestamp? parseOptional(dynamic v) {
-      if (v == null) return null;
-      final dt = parseTs(v);
-      return Timestamp.fromDate(dt);
-    }
-
-    return Order(
-      id: id,
-      buyerId: map['buyerId'] ?? map['buyer_id'] ?? '',
-      buyerName: map['buyerName'] ?? map['buyer_name'] ?? '',
-      buyerEmail: map['buyerEmail'] ?? map['buyer_email'] ?? '',
-      buyerPhone: map['buyerPhone'] ?? map['buyer_phone'] ?? '',
-      items: (map['items'] as List?)?.map((item) => OrderItem.fromMap(Map<String, dynamic>.from(item))).toList() ?? [],
-      totalAmount: (map['totalAmount'] ?? map['total_amount'] ?? 0).toDouble(),
-      status: map['status'] ?? 'pending',
-      deliveryAddress: map['deliveryAddress'] ?? map['delivery_address'] ?? '',
-      city: map['city'] ?? '',
-      state: map['state'] ?? '',
-      zipCode: map['zipCode'] ?? map['zip_code'] ?? '',
-      paymentMethod: map['paymentMethod'] ?? map['payment_method'] ?? 'cod',
-      paymentStatus: map['paymentStatus'] ?? map['payment_status'] ?? 'pending',
-      createdAt: createdTs,
-      confirmedAt: parseOptional(map['confirmedAt'] ?? map['confirmed_at']),
-      shippedAt: parseOptional(map['shippedAt'] ?? map['shipped_at']),
-      deliveredAt: parseOptional(map['deliveredAt'] ?? map['delivered_at']),
-      cancelledAt: parseOptional(map['cancelledAt'] ?? map['cancelled_at']),
-      trackingNumber: map['trackingNumber'] ?? map['tracking_number'],
+      zipCode: map['zip_code'] ?? map['zipCode'] ?? '',
+      paymentMethod: map['payment_method'] ?? map['paymentMethod'] ?? 'cod',
+      paymentStatus: map['payment_status'] ?? map['paymentStatus'] ?? 'pending',
+      createdAt: map['created_at'] is String
+          ? DateTime.parse(map['created_at'])
+          : (map['created_at'] is DateTime ? map['created_at'] : DateTime.now()),
+      confirmedAt: map['confirmed_at'] is String ? DateTime.parse(map['confirmed_at']) : null,
+      shippedAt: map['shipped_at'] is String ? DateTime.parse(map['shipped_at']) : null,
+      deliveredAt: map['delivered_at'] is String ? DateTime.parse(map['delivered_at']) : null,
+      cancelledAt: map['cancelled_at'] is String ? DateTime.parse(map['cancelled_at']) : null,
+      trackingNumber: map['tracking_number'] ?? map['trackingNumber'],
       notes: map['notes'],
     );
   }
@@ -197,10 +148,10 @@ class Order {
   Order copyWith({
     String? status,
     String? paymentStatus,
-    Timestamp? confirmedAt,
-    Timestamp? shippedAt,
-    Timestamp? deliveredAt,
-    Timestamp? cancelledAt,
+    DateTime? confirmedAt,
+    DateTime? shippedAt,
+    DateTime? deliveredAt,
+    DateTime? cancelledAt,
     String? trackingNumber,
     String? notes,
   }) {

@@ -76,7 +76,7 @@ class _ProductListPageState extends State<ProductListPage> with TickerProviderSt
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
-    final userId = auth.user?.uid;
+    final userId = auth.user?.id;
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -89,7 +89,7 @@ class _ProductListPageState extends State<ProductListPage> with TickerProviderSt
         child: CustomScrollView(
           slivers: [
             SliverAppBar(
-              expandedHeight: 120,
+              expandedHeight: 80,
               floating: true,
               pinned: true,
               backgroundColor: const Color(0xFF617A2E),
@@ -101,25 +101,6 @@ class _ProductListPageState extends State<ProductListPage> with TickerProviderSt
                       colors: [const Color(0xFF2D5016), const Color(0xFF617A2E)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                    ),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.shopping_bag, color: Colors.white, size: 28),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Fresh from Farms', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                              Text('Quality products near you', style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 12)),
-                            ],
-                          ),
-                        ),
-                      ],
                     ),
                   ),
                 ),

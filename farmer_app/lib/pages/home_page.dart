@@ -1,6 +1,6 @@
 // lib/pages/home_page.dart
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../providers/weather_provider.dart';
@@ -70,7 +70,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = Supabase.instance.client.auth.currentUser;
     final connectivityProvider = context.watch<ConnectivityProvider>();
     final profileProvider = context.watch<ProfileProvider>();
 
@@ -120,8 +120,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     String userName = 'Farmer';
     if (profileProvider.profile != null && profileProvider.profile!.name.isNotEmpty) {
       userName = profileProvider.profile!.name;
-    } else if (user != null && user.displayName != null && user.displayName!.isNotEmpty) {
-      userName = user.displayName!;
+    } else if (user != null && (user.userMetadata?['name'] ?? '').toString().isNotEmpty) {
+      userName = user.userMetadata?['name'] ?? '';
     } else if (user != null && user.email != null) {
       userName = user.email!.split('@')[0];
     }
@@ -480,7 +480,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         const SizedBox(height: 16),
         Row(
           children: [
-            const Spacer(),
             Expanded(
               child: _buildAnimatedActionCard(
                 icon: Icons.assignment,
@@ -514,7 +513,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             onTap: onTap,
             borderRadius: BorderRadius.circular(20),
             child: Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
@@ -529,7 +528,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               child: Column(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
@@ -539,13 +538,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       ),
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: Icon(icon, color: Colors.white, size: 32),
+                    child: Icon(icon, color: Colors.white, size: 28),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   Text(
                     title,
                     style: const TextStyle(
-                      fontSize: 16,
+                      fontSize: 14,
                       fontWeight: FontWeight.bold,
                       color: Color(0xFF2C3E1F),
                     ),
@@ -554,7 +553,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   Text(
                     subtitle,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 11,
                       color: Colors.grey[600],
                     ),
                   ),

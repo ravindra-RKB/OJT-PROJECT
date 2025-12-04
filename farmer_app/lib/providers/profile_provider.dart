@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_profile.dart';
 import '../services/profile_service.dart';
 
@@ -21,15 +21,16 @@ class ProfileProvider with ChangeNotifier {
 
     try {
       await _profileService.init();
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        _profile = await _profileService.getProfile(user.uid);
+      final supabaseUser = Supabase.instance.client.auth.currentUser;
+      if (supabaseUser != null) {
+        _profile = await _profileService.getProfile(supabaseUser.id);
         if (_profile == null) {
-          // Create default profile from Firebase user
+          // Create default profile from Supabase user
+          final displayName = supabaseUser.userMetadata?['name'] ?? supabaseUser.email?.split('@')[0] ?? 'Farmer';
           _profile = UserProfile(
-            userId: user.uid,
-            name: user.displayName ?? user.email?.split('@')[0] ?? 'Farmer',
-            email: user.email ?? '',
+            userId: supabaseUser.id,
+            name: displayName,
+            email: supabaseUser.email ?? '',
             createdAt: DateTime.now(),
             updatedAt: DateTime.now(),
           );
@@ -66,9 +67,9 @@ class ProfileProvider with ChangeNotifier {
   }
 
   Future<void> refreshProfile() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      _profile = await _profileService.getProfile(user.uid);
+    final supabaseUser = Supabase.instance.client.auth.currentUser;
+    if (supabaseUser != null) {
+      _profile = await _profileService.getProfile(supabaseUser.id);
       notifyListeners();
     }
   }

@@ -1,7 +1,7 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'services/supabase_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'routes.dart';
@@ -22,13 +22,13 @@ void main() async {
   } catch (e) {
     debugPrint('dotenv load failed: $e');
   }
-
-  // Initialize Supabase
-  try {
-    await SupabaseService().initialize();
-  } catch (e) {
-    debugPrint('Supabase initialize failed: $e');
-  }
+  // Initialize Supabase using environment variables (set SUPABASE_URL and SUPABASE_ANON_KEY)
+  final supabaseUrl = dotenv.env['SUPABASE_URL'] ?? '';
+  final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
+  await Supabase.initialize(
+    url: supabaseUrl,
+    anonKey: supabaseAnonKey,
+  );
   await Hive.initFlutter();
   runApp(const MyApp());
 }

@@ -1,43 +1,32 @@
 import 'package:flutter/foundation.dart';
-import '../services/supabase_service.dart';
-
-/// Lightweight user model to preserve `.uid` usage across the codebase.
-class SimpleUser {
-  final String uid;
-  final String? email;
-  SimpleUser({required this.uid, this.email});
-
-  String? get displayName => email; // keep compatibility with existing code expecting displayName
-  String? get photoURL => null;
-}
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AuthProvider with ChangeNotifier {
-  final SupabaseService _supabase = SupabaseService();
-  SimpleUser? _user;
+  final _supabase = Supabase.instance.client;
+  User? _user;
 
-  SimpleUser? get user => _user;
+  User? get user => _user;
   bool get isAuthenticated => _user != null;
 
   AuthProvider() {
-    // Listen to auth changes
-    _supabase.client.auth.onAuthStateChange.listen((event) {
-      final u = _supabase.currentUser;
-      if (u != null) {
-        _user = SimpleUser(uid: u.id, email: u.email);
-      } else {
-        _user = null;
-      }
+    // initialize current user
+    _user = _supabase.auth.currentUser;
+    // listen to auth changes
+    _supabase.auth.onAuthStateChange.listen((data) {
+      _user = data.session?.user;
       notifyListeners();
     });
-    // initialize current state
-    final u = _supabase.currentUser;
-    if (u != null) _user = SimpleUser(uid: u.id, email: u.email);
   }
 
   Future<bool> signIn(String email, String password) async {
     try {
-      await _supabase.signIn(email, password);
-      return true;
+      final res = await _supabase.auth.signInWithPassword(email: email, password: password);
+      if (res.user != null) {
+        _user = res.user;
+        notifyListeners();
+        return true;
+      }
+      return false;
     } catch (e) {
       return false;
     }
@@ -45,15 +34,22 @@ class AuthProvider with ChangeNotifier {
 
   Future<bool> signUp(String email, String password) async {
     try {
-      await _supabase.signUp(email, password);
-      return true;
+      final res = await _supabase.auth.signUp(email: email, password: password);
+      if (res.user != null) {
+        _user = res.user;
+        notifyListeners();
+        return true;
+      }
+      return false;
     } catch (e) {
       return false;
     }
   }
 
   Future<void> signOut() async {
-    await _supabase.signOut();
+    await _supabase.auth.signOut();
+    _user = null;
+    notifyListeners();
   }
 }
 

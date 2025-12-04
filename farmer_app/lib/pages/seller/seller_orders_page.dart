@@ -25,7 +25,7 @@ class _SellerOrdersPageState extends State<SellerOrdersPage> {
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final user = auth.user;
     if (user != null) {
-      Provider.of<OrderProvider>(context, listen: false).loadSellerOrders(user.uid);
+      Provider.of<OrderProvider>(context, listen: false).loadSellerOrders(user.id);
     }
   }
 
