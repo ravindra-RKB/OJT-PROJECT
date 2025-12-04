@@ -35,7 +35,7 @@ class OnboardingLoginPage extends StatelessWidget {
                     ),
                     const SizedBox(height: 10),
                     const Text(
-                      'Agriculture is a marketplace where you can find the best fruits and vegetable in Bangladesh',
+                      'Agriculture is a marketplace where you can find the best fruits and vegetables in India',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Color(0xFFCECECE), fontSize: 13),
                     ),
